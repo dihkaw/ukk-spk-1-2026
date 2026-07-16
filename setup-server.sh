@@ -31,6 +31,9 @@ DOMAIN="lab-smk.xyz"
 ALLOWED_RECURSION_NET="192.168.30.0/24"   # hanya VLAN 30 boleh recursive query
 WEBROOT="/var/www/${DOMAIN}"
 
+ROUTER_IP="192.168.30.1"       # IP Router MikroTik (VLAN 30) - SNMP client harus sudah "on"
+SNMP_COMMUNITY="public"        # sesuaikan dengan SNMP community string di router MikroTik
+
 echo "======================================================"
 echo " Memulai konfigurasi server ${DOMAIN} (${IP_ADDRESS})"
 echo "======================================================"
@@ -53,7 +56,7 @@ echo "   OK - IP: ${CURRENT_IP}, internet: terkoneksi."
 
 # ================= 1. UPDATE SISTEM =================
 echo ">> [1/5] Update repository & sistem..."
-apt update -y && apt upgrade -y
+apt update -y # opsional yaaaa tambahin iniiii    && apt upgrade -y
 
 # ================= 2. INSTALL & KONFIGURASI BIND9 (DNS SERVER) =================
 echo ">> [2/5] Install & konfigurasi BIND9 (DNS Server)..."
@@ -130,7 +133,7 @@ cat > "${WEBROOT}/index.html" <<'HTMLEOF'
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPK Paket 1 - Lab SMK negeri 1 Banyumas</title>
+    <title>SPK Paket 1 - Lab SMK Negeri 1 Banyumas</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -403,6 +406,66 @@ systemctl enable netdata
 systemctl restart netdata
 echo "   Netdata aktif secara internal di 127.0.0.1:19999 (tidak diekspos langsung)"
 
+# --- Tambah host monitoring: ROUTER (via SNMP) ---
+echo ">> Konfigurasi monitoring Router MikroTik (${ROUTER_IP}) via SNMP..."
+apt install -y snmp
+
+mkdir -p /etc/netdata/go.d
+
+# Aktifkan plugin SNMP pada go.d
+if [ -f /etc/netdata/go.d.conf ]; then
+    if grep -q "^\s*snmp:" /etc/netdata/go.d.conf; then
+        sed -i "s/^\s*snmp:.*/  snmp: yes/" /etc/netdata/go.d.conf
+    else
+        echo "  snmp: yes" >> /etc/netdata/go.d.conf
+    fi
+else
+    cat > /etc/netdata/go.d.conf <<EOF
+modules:
+  snmp: yes
+EOF
+fi
+
+# Konfigurasi job SNMP untuk host "router" - ambil metrik CPU & Memory
+# OID di bawah mengikuti HOST-RESOURCES-MIB (umum didukung RouterOS).
+# Cek/uji dulu dengan: snmpwalk -v2c -c ${SNMP_COMMUNITY} ${ROUTER_IP} 1.3.6.1.2.1.25.3.3.1.2
+cat > /etc/netdata/go.d/snmp.conf <<EOF
+jobs:
+  - name: router
+    update_every: 10
+    hostname: '${ROUTER_IP}'
+    community: '${SNMP_COMMUNITY}'
+    options:
+      port: 161
+      retries: 1
+    charts:
+      - table:
+          - name: cpu_load
+            title: 'Router CPU Load'
+            units: '%'
+            family: 'cpu'
+            type: line
+            dimensions:
+              - oid: 1.3.6.1.2.1.25.3.3.1.2.1
+                name: cpu
+                algorithm: absolute
+      - table:
+          - name: memory_usage
+            title: 'Router Memory Used'
+            units: 'bytes'
+            family: 'memory'
+            type: area
+            dimensions:
+              - oid: 1.3.6.1.2.1.25.2.3.1.6.65536
+                name: memory_used
+                algorithm: absolute
+EOF
+
+systemctl restart netdata
+echo "   Host 'router' (${ROUTER_IP}) ditambahkan ke monitoring via SNMP."
+echo "   PENTING: pastikan community string '${SNMP_COMMUNITY}' sesuai konfigurasi SNMP di router,"
+echo "   dan OID CPU/Memory di /etc/netdata/go.d/snmp.conf sudah diverifikasi dengan snmpwalk."
+
 # --- Reverse proxy nginx untuk monitor.${DOMAIN} (HTTPS) ---
 echo ">> Konfigurasi reverse proxy HTTPS untuk monitor.${DOMAIN}..."
 cat > /etc/nginx/sites-available/monitor.${DOMAIN} <<EOF
@@ -452,6 +515,8 @@ echo " SELESAI!"
 echo " - DNS   : dig @${IP_ADDRESS} ${DOMAIN}"
 echo " - Web   : https://${DOMAIN}  (atau https://${IP_ADDRESS})"
 echo " - Monitor: https://monitor.${DOMAIN}   (port 19999 tertutup dari luar)"
+echo "   Host di monitoring: 'server' (localhost) & 'router' (${ROUTER_IP} via SNMP)"
+echo "   Verifikasi SNMP router: snmpwalk -v2c -c ${SNMP_COMMUNITY} ${ROUTER_IP} system"
 echo " Pastikan client (VLAN 10/20/30) mengarahkan DNS ke ${IP_ADDRESS}"
 echo " agar domain ${DOMAIN} bisa di-resolve."
 echo "======================================================"
