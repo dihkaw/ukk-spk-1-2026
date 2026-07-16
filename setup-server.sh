@@ -21,12 +21,12 @@ set -e
 # --------- Cek harus dijalankan sebagai root ----------
 if [ "$EUID" -ne 0 ]; then
     echo ">> Jalankan script ini dengan sudo/root!"
-    echo "   sudo ./aplikasi.sh"
+    echo "   sudo ./setup-server.sh"
     exit 1
 fi
 
 # ================= VARIABEL KONFIGURASI =================
-IP_ADDRESS="192.168.30.10"                # harus sama dengan IP static yang sudah diset manual
+IP_ADDRESS="192.168.30.10"    # harus sama dengan IP static yang sudah diset manual
 DOMAIN="lab-smk.xyz"
 ALLOWED_RECURSION_NET="192.168.30.0/24"   # hanya VLAN 30 boleh recursive query
 WEBROOT="/var/www/${DOMAIN}"
@@ -53,7 +53,7 @@ echo "   OK - IP: ${CURRENT_IP}, internet: terkoneksi."
 
 # ================= 1. UPDATE SISTEM =================
 echo ">> [1/5] Update repository & sistem..."
-apt update -y # bisa ditamhkan && apt upgrade -y
+apt update -y && apt upgrade -y
 
 # ================= 2. INSTALL & KONFIGURASI BIND9 (DNS SERVER) =================
 echo ">> [2/5] Install & konfigurasi BIND9 (DNS Server)..."
@@ -130,7 +130,7 @@ cat > "${WEBROOT}/index.html" <<'HTMLEOF'
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPK Paket 1 - Lab SMK Negeri 1 Banyumas</title>
+    <title>SPK Paket 1 - Lab SMK negeri 1 Banyumas</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -153,7 +153,7 @@ cat > "${WEBROOT}/index.html" <<'HTMLEOF'
 
     <section id="tentang" class="section">
         <h2>Tentang Topologi</h2>
-        <p>Server ini merupakan bagian dari topologi UKK TJKT SPK Paket 1, dengan
+        <p>Server ini merupakan bagian dari topologi UKK TJKT/TKJ SPK Paket 1, dengan
         layanan DNS, Web Server, dan Monitoring yang berjalan pada satu VM Ubuntu/Debian
         di VLAN 30 (192.168.30.10/24).</p>
     </section>
@@ -178,11 +178,11 @@ cat > "${WEBROOT}/index.html" <<'HTMLEOF'
 
     <section id="kontak" class="section">
         <h2>Kontak</h2>
-        <p>Admin Lab SMK &mdash; admin@lab-smk.xyz</p>
+        <p>Admin Lab SMK Negeri 1 Banyumas &mdash; admin@lab-smk.xyz</p>
     </section>
 
     <footer>
-        <p>&copy; 2026 UKK TJKT - SPK Paket 1</p>
+        <p>&copy; 2026 UKK TJKT/TKJ - SPK Paket 1</p>
     </footer>
 
     <script src="script.js"></script>
@@ -394,12 +394,48 @@ if ! command -v netdata >/dev/null 2>&1; then
     apt install -y netdata
 fi
 
-# Netdata default berjalan di port 19999, bind ke semua interface
-sed -i 's/# bind to = \*/bind to = */' /etc/netdata/netdata.conf 2>/dev/null || true
+# Netdata dibatasi hanya bisa diakses dari localhost saja (127.0.0.1)
+# Akses dari luar HARUS lewat reverse proxy nginx (HTTPS) di bawah ini
+sed -i "s/# bind to = \*/bind to = 127.0.0.1/" /etc/netdata/netdata.conf 2>/dev/null || \
+sed -i "/\[web\]/a\\    bind to = 127.0.0.1" /etc/netdata/netdata.conf
 
 systemctl enable netdata
 systemctl restart netdata
-echo "   Monitoring aktif di http://${IP_ADDRESS}:19999 (dan monitor.${DOMAIN}:19999)"
+echo "   Netdata aktif secara internal di 127.0.0.1:19999 (tidak diekspos langsung)"
+
+# --- Reverse proxy nginx untuk monitor.${DOMAIN} (HTTPS) ---
+echo ">> Konfigurasi reverse proxy HTTPS untuk monitor.${DOMAIN}..."
+cat > /etc/nginx/sites-available/monitor.${DOMAIN} <<EOF
+server {
+    listen 80;
+    server_name monitor.${DOMAIN};
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name monitor.${DOMAIN};
+
+    ssl_certificate     /etc/nginx/ssl/${DOMAIN}.crt;
+    ssl_certificate_key /etc/nginx/ssl/${DOMAIN}.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:19999;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "keep-alive";
+    }
+}
+EOF
+
+ln -sf /etc/nginx/sites-available/monitor.${DOMAIN} /etc/nginx/sites-enabled/monitor.${DOMAIN}
+nginx -t
+systemctl restart nginx
+echo "   Monitoring aktif via HTTPS: https://monitor.${DOMAIN}"
 
 # ================= 6. FIREWALL DASAR SERVER (UFW) =================
 echo ">> [5/5] Konfigurasi firewall dasar (UFW) pada server..."
@@ -408,14 +444,14 @@ ufw allow 22/tcp      # SSH
 ufw allow 53          # DNS
 ufw allow 80/tcp      # HTTP
 ufw allow 443/tcp     # HTTPS
-ufw allow 19999/tcp   # Netdata monitoring
+ufw deny 19999/tcp    # Netdata TIDAK diakses langsung dari luar, hanya via proxy nginx
 ufw --force enable
 
 echo "======================================================"
 echo " SELESAI!"
 echo " - DNS   : dig @${IP_ADDRESS} ${DOMAIN}"
 echo " - Web   : https://${DOMAIN}  (atau https://${IP_ADDRESS})"
-echo " - Monitor: http://${DOMAIN}:19999"
+echo " - Monitor: https://monitor.${DOMAIN}   (port 19999 tertutup dari luar)"
 echo " Pastikan client (VLAN 10/20/30) mengarahkan DNS ke ${IP_ADDRESS}"
 echo " agar domain ${DOMAIN} bisa di-resolve."
 echo "======================================================"
