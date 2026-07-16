@@ -6,6 +6,11 @@
 #  IP Server  : 192.168.30.10/24 (VLAN 30)
 #  Layanan    : DNS (bind9), Web (nginx + HTTPS), Monitoring (netdata)
 #
+#  CATATAN:
+#  Script ini TIDAK mengubah konfigurasi IP.
+#  IP Static (192.168.30.10/24) harus SUDAH dikonfigurasi manual
+#  dan server sudah bisa akses internet SEBELUM script ini dijalankan.
+#
 #  Cara pakai:
 #    sudo chmod +x setup-server.sh
 #    sudo ./setup-server.sh
@@ -16,52 +21,42 @@ set -e
 # --------- Cek harus dijalankan sebagai root ----------
 if [ "$EUID" -ne 0 ]; then
     echo ">> Jalankan script ini dengan sudo/root!"
-    echo "   sudo ./aplikasi.sh"
+    echo "   sudo ./setup-server.sh"
     exit 1
 fi
 
 # ================= VARIABEL KONFIGURASI =================
-IP_ADDRESS="192.168.3.127"   # sesuaikan dengan IP yang ditentukan
-NETMASK="24"
-GATEWAY="192.168.3.2"       # sesuaikan dengan gateway VLAN 30 di router
-DNS_SERVER="192.168.3.127"
+IP_ADDRESS="192.168.30.10"    # harus sama dengan IP static yang sudah diset manual
 DOMAIN="lab-smk.xyz"
-INTERFACE="ens33"            # sesuaikan dengan nama interface VM (cek: ip a)
-ALLOWED_RECURSION_NET="192.168.3.0/24"   # hanya VLAN 30 boleh recursive query
+ALLOWED_RECURSION_NET="192.168.30.0/24"   # hanya VLAN 30 boleh recursive query
 WEBROOT="/var/www/${DOMAIN}"
 
 echo "======================================================"
 echo " Memulai konfigurasi server ${DOMAIN} (${IP_ADDRESS})"
 echo "======================================================"
 
+# --------- Cek dulu apakah IP server sudah sesuai & internet nyambung ----------
+CURRENT_IP=$(hostname -I | awk '{print $1}')
+if [ "$CURRENT_IP" != "$IP_ADDRESS" ]; then
+    echo ">> PERINGATAN: IP server saat ini (${CURRENT_IP}) berbeda dengan ${IP_ADDRESS}."
+    echo "   Pastikan IP static sudah dikonfigurasi manual sebelum lanjut."
+    read -p "   Lanjutkan tetap? (y/n): " confirm
+    [ "$confirm" != "y" ] && exit 1
+fi
+
+if ! ping -c 2 8.8.8.8 >/dev/null 2>&1; then
+    echo ">> ERROR: Server belum terkoneksi ke internet."
+    echo "   Selesaikan konfigurasi IP static & gateway secara manual dulu."
+    exit 1
+fi
+echo "   OK - IP: ${CURRENT_IP}, internet: terkoneksi."
+
 # ================= 1. UPDATE SISTEM =================
-echo ">> [1/6] Update repository & sistem..."
-apt update -y && apt upgrade -y
+echo ">> [1/5] Update repository & sistem..."
+apt update -y # bisa ditamhkan && apt upgrade -y
 
-# ================= 2. KONFIGURASI IP STATIC =================
-echo ">> [2/6] Konfigurasi IP Static ${IP_ADDRESS}/${NETMASK} pada ${INTERFACE}..."
-
-NETPLAN_FILE="/etc/netplan/50-cloud-init.yaml"
-cat > "$NETPLAN_FILE" <<EOF
-network:
-  version: 2
-  ethernets:
-    ${INTERFACE}:
-      dhcp4: no
-      addresses:
-        - ${IP_ADDRESS}/${NETMASK}
-      routes:
-        - to: default
-          via: ${GATEWAY}
-      nameservers:
-        addresses: [${DNS_SERVER}, 8.8.8.8]
-EOF
-
-chmod 600 "$NETPLAN_FILE"
-netplan apply || echo "   (Peringatan: netplan apply gagal, cek interface name dengan 'ip a')"
-
-# ================= 3. INSTALL & KONFIGURASI BIND9 (DNS SERVER) =================
-echo ">> [3/6] Install & konfigurasi BIND9 (DNS Server)..."
+# ================= 2. INSTALL & KONFIGURASI BIND9 (DNS SERVER) =================
+echo ">> [2/5] Install & konfigurasi BIND9 (DNS Server)..."
 apt install -y bind9 bind9utils bind9-doc dnsutils
 
 # --- named.conf.options : disable recursion untuk VLAN 20, izinkan VLAN 30 ---
@@ -122,7 +117,7 @@ systemctl restart named
 echo "   DNS server aktif untuk zone ${DOMAIN} (www, monitor -> ${IP_ADDRESS})"
 
 # ================= 4. INSTALL & KONFIGURASI NGINX (WEB SERVER) =================
-echo ">> [4/6] Install & konfigurasi NGINX (Web Server + HTTPS self-signed)..."
+echo ">> [3/5] Install & konfigurasi NGINX (Web Server + HTTPS self-signed)..."
 apt install -y nginx openssl
 
 mkdir -p "${WEBROOT}"
@@ -135,7 +130,7 @@ cat > "${WEBROOT}/index.html" <<'HTMLEOF'
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPK Paket 1 - Lab SMK</title>
+    <title>SPK Paket 1 - Lab SMK Negeri 1 Banyumas</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -158,7 +153,7 @@ cat > "${WEBROOT}/index.html" <<'HTMLEOF'
 
     <section id="tentang" class="section">
         <h2>Tentang Topologi</h2>
-        <p>Server ini merupakan bagian dari topologi UKK TKJ SPK Paket 1, dengan
+        <p>Server ini merupakan bagian dari topologi UKK TJKT SPK Paket 1, dengan
         layanan DNS, Web Server, dan Monitoring yang berjalan pada satu VM Ubuntu/Debian
         di VLAN 30 (192.168.30.10/24).</p>
     </section>
@@ -187,7 +182,7 @@ cat > "${WEBROOT}/index.html" <<'HTMLEOF'
     </section>
 
     <footer>
-        <p>&copy; 2026 UKK TKJ - SPK Paket 1</p>
+        <p>&copy; 2026 UKK TJKT - SPK Paket 1</p>
     </footer>
 
     <script src="script.js"></script>
@@ -393,7 +388,7 @@ systemctl restart nginx
 echo "   Web server aktif: https://${DOMAIN} (self-signed)"
 
 # ================= 5. INSTALL & KONFIGURASI NETDATA (MONITORING) =================
-echo ">> [5/6] Install Netdata (Monitoring Server)..."
+echo ">> [4/5] Install Netdata (Monitoring Server)..."
 if ! command -v netdata >/dev/null 2>&1; then
     bash <(curl -Ss https://get.netdata.cloud/kickstart.sh) --non-interactive --stable-channel || \
     apt install -y netdata
@@ -407,7 +402,7 @@ systemctl restart netdata
 echo "   Monitoring aktif di http://${IP_ADDRESS}:19999 (dan monitor.${DOMAIN}:19999)"
 
 # ================= 6. FIREWALL DASAR SERVER (UFW) =================
-echo ">> [6/6] Konfigurasi firewall dasar (UFW) pada server..."
+echo ">> [5/5] Konfigurasi firewall dasar (UFW) pada server..."
 apt install -y ufw
 ufw allow 22/tcp      # SSH
 ufw allow 53          # DNS
