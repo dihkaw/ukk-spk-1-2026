@@ -27,7 +27,7 @@ Total ada **5 VM** yang harus dibuat di hypervisor (VirtualBox / VMware / Proxmo
 ### Spesifikasi VM
 | Item | Rekomendasi |
 |---|---|
-| RAM | 128–256 MB (minimum CHR), disarankan **256 MB** agar stabil |
+| RAM | 128 MB (minimum CHR), disarankan **256 MB** agar stabil |
 | CPU | 1 vCPU |
 | Disk | 128 MB – 1 GB (image CHR .vmdk/.qcow2 bawaan sudah cukup) |
 | OS Type | Other Linux (64-bit) / MikroTik CHR image |
@@ -52,7 +52,7 @@ Total ada **5 VM** yang harus dibuat di hypervisor (VirtualBox / VMware / Proxmo
 ### Spesifikasi VM
 | Item | Rekomendasi |
 |---|---|
-| RAM | 128–256 MB, disarankan **256 MB** |
+| RAM | 128 MB, disarankan **256 MB** |
 | CPU | 1 vCPU |
 | Disk | 128 MB – 1 GB |
 | OS Type | Other Linux (64-bit) / MikroTik CHR image |
@@ -79,7 +79,7 @@ Total ada **5 VM** yang harus dibuat di hypervisor (VirtualBox / VMware / Proxmo
 ### Spesifikasi VM
 | Item | Rekomendasi |
 |---|---|
-| RAM | Minimum 1 GB, disarankan **2 GB** (untuk bind9 + nginx + netdata berjalan bersamaan) |
+| RAM | Minimum 512 GB, disarankan **2 GB** (untuk bind9 + nginx + netdata berjalan bersamaan) |
 | CPU | 1–2 vCPU |
 | Disk | Minimum 10 GB, disarankan **20 GB** |
 | OS | Ubuntu Server 24.04 LTS (mode instalasi minimal/server, tanpa GUI) |
