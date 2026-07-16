@@ -1,9 +1,13 @@
-# Tahap 1: Konfigurasi IP Static Manual (dikerjakan sendiri)
-Sesuai netplan bawaan Ubuntu 24.04, mketik langsung di terminal server:
+# Langkah deployment server
+1. [Download](https://drive.google.com/file/d/17JeH2oiVa3eWacV5kAjVZhsoK3u3Ao_S/view?usp=drive_link) file ova Ubuntu 24.04
+
+2. Konfigurasi IP Static Manual (dikerjakan sendiri).
+   Sesuai netplan bawaan Ubuntu 24.04, ketik langsung di terminal server:
 ```bash
 sudo nano /etc/netplan/50-cloud-init.yaml
 ```
-Isi/edit jadi seperti ini (sesuaikan nama interface, cek dulu dengan ip a):
+
+3. Isi/edit jadi seperti ini (sesuaikan nama interface, cek dulu dengan ip a):
 ```yaml
 network:
   version: 2
@@ -18,12 +22,14 @@ network:
       nameservers:
         addresses: [8.8.8.8, 1.1.1.1]   # sementara pakai DNS publik dulu
 ```
-Simpan (Ctrl+O, Enter, Ctrl+X), lalu terapkan:
+
+4. Simpan ( tekan Ctrl+X, tekan Y, tekan Enter), lalu terapkan:
 ```bash
-sudo chmod 600 /etc/netplan/50-cloud-init.yaml
+sudo chmod 600 /etc/netplan/50-cloud-init.yaml   # opsional yaa
 sudo netplan apply
 ```
-Cek dan pastikan sudah konek internet sebelum lanjut:
+
+5. Cek dan pastikan sudah konek internet sebelum lanjut:
 ```bash
 ip a     # pastikan IP 192.168.30.10/24 sudah aktif
 ```
@@ -35,9 +41,13 @@ ping -c 4 192.168.30.1    # tes gateway
 ```bash
 ping -c 4 8.8.8.8     #tes internet
 ```
+Kalau ping 8.8.8.8 berhasil (reply, bukan timeout), baru lanjut ke langkah 6.
 
-Kalau ping 8.8.8.8 berhasil (reply, bukan timeout), baru lanjut ke tahap 2.
-
-#Tahap 2: Download & jalankan bash script
+6. Download & jalankan bash script
 ```bash
-wget https://raw.githubusercontent.com/dihkaw/ukk-spk-1-2026/main/aplikasi.sh -O setup-server.sh && sudo chmod +x setup-server.sh && sudo ./setup-server.sh
+wget https://raw.githubusercontent.com/dihkaw/ukk-spk-1-2026/main/aplikasi.sh -O aplikasi.sh && sudo chmod +x aplikasi.sh && sudo ./aplikasi.sh
+```
+
+7. Uji ciba di PC client
+   Pastikan konfigurasi IP pada client menggunakan alamat DNS utama 192.168.30.10 dan alternate kosong
+
