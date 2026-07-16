@@ -3,7 +3,7 @@
 
 Tutorial ini menggunakan **WinBox versi terbaru** (v3.x / v4.x) untuk mengkonfigurasi **VM Router MikroTik (CHR)** sesuai topologi SPK Paket 1.
 
-Persiapkan VM CHR yang dapat di[download](https://download.mikrotik.com/routeros/7.23.2/chr-7.23.2.ova) di https://mikrotik.com/download dan dijalankan dengan pengaturan spesifikasi RAM sebesar 128MB dan penambahan Network Interface menjadi 3 (ether1: NAT; ether2: LAN Segment; ether3: Host Only)
+### Persiapkan VM CHR yang dapat di[download](https://download.mikrotik.com/routeros/7.23.2/chr-7.23.2.ova) di situs resmi MikroTik dan dijalankan dengan pengaturan spesifikasi RAM sebesar 128MB dan penambahan Network Interface menjadi 3 (ether1: NAT; ether2: LAN Segment "Router-Switch"; ether3: Host Only)
 ---
 
 ## 📋 Topologi Router
@@ -30,21 +30,21 @@ Persiapkan VM CHR yang dapat di[download](https://download.mikrotik.com/routeros
 4. Setelah masuk, disarankan langsung reset konfigurasi default agar bersih:
    - Menu **System → Reset Configuration** → centang **No Default Configuration** → klik **Reset Configuration**.
    - Winbox akan terputus, sambungkan ulang via MAC Address.
+5. Buka menu **System  → Identity**.
+6. Isi **Identity**: *router-NamaAnda*
+7. Klik **Apply → OK**.
 
 ---
 
 ## 1️⃣ Konfigurasi Ether1 (DHCP Client / Internet)
 
-1. Buka menu **System  → Identity**.
-2. Isi **Identity**: *router-NamaAnda*
-3. Klik **Apply → OK**.
-4. Buka menu **IP → DHCP Client**.
-5. Klik tombol **`+`** (Add).
-6. Pada tab **General**:
+1. Buka menu **IP → DHCP Client**.
+2. Klik tombol **`+`** (Add).
+3. Pada tab **General**:
    - **Interface**: `ether1`
    - **Use Peer DNS**: **hilangkan centang (off)** — sesuai requirement (DNS akan diarahkan manual ke server).
-7. Klik **Apply → OK**.
-8. Cek status DHCP Client, pastikan **Status: bound** dan mendapat IP dari internet/bridge.
+4. Klik **Apply → OK**.
+5. Cek status DHCP Client, pastikan **Status: bound** dan mendapat IP dari internet/bridge.
 
 **Terminal equivalent** (bisa dicek via New Terminal):
 ```
