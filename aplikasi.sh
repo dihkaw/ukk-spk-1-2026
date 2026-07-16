@@ -21,12 +21,12 @@ set -e
 # --------- Cek harus dijalankan sebagai root ----------
 if [ "$EUID" -ne 0 ]; then
     echo ">> Jalankan script ini dengan sudo/root!"
-    echo "   sudo ./setup-server.sh"
+    echo "   sudo ./aplikasi.sh"
     exit 1
 fi
 
 # ================= VARIABEL KONFIGURASI =================
-IP_ADDRESS="192.168.30.10"    # harus sama dengan IP static yang sudah diset manual
+IP_ADDRESS="192.168.30.10"                # harus sama dengan IP static yang sudah diset manual
 DOMAIN="lab-smk.xyz"
 ALLOWED_RECURSION_NET="192.168.30.0/24"   # hanya VLAN 30 boleh recursive query
 WEBROOT="/var/www/${DOMAIN}"
