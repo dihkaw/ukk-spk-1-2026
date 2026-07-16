@@ -45,7 +45,7 @@ Kalau ping 8.8.8.8 berhasil (reply, bukan timeout), baru lanjut ke langkah 6.
 
 6. Download & jalankan bash script
 ```bash
-wget https://raw.githubusercontent.com/dihkaw/ukk-spk-1-2026/main/aplikasi.sh -O aplikasi.sh && sudo chmod +x aplikasi.sh && sudo ./aplikasi.sh
+wget https://raw.githubusercontent.com/dihkaw/ukk-spk-1-2026/main/setup-server.sh -O setup-server.sh && sudo chmod +x setup-server.sh && sudo ./setup-server.sh
 ```
 
 7. Uji ciba di PC client
