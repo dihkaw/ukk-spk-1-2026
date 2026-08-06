@@ -151,7 +151,7 @@ Gunakan **DHCP Setup Wizard** agar lebih cepat.
 3. **DHCP Address Space**: `192.168.10.0/24` → Next
 4. **Gateway for DHCP Network**: `192.168.10.1` → Next
 5. **Addresses to Give Out**: `192.168.10.10-192.168.10.254` → Next
-6. **DNS Servers**: `192.168.30.10, 8.8.8.8` → Next
+6. **DNS Servers**: `192.168.30.10` → Next
 7. **Lease Time**: default (`00:10:00` atau sesuaikan) → Next → **selesai**.
 
 ### DHCP Server VLAN 20 (Siswa)
@@ -165,11 +165,11 @@ Ulangi langkah yang sama dengan:
 ```
 /ip pool add name=pool-vlan10 ranges=192.168.10.10-192.168.10.254
 /ip dhcp-server add name=dhcp-vlan10 interface=vlan10 address-pool=pool-vlan10 disabled=no
-/ip dhcp-server network add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.30.10,8.8.8.8
+/ip dhcp-server network add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.30.10
 
 /ip pool add name=pool-vlan20 ranges=192.168.20.10-192.168.20.254
 /ip dhcp-server add name=dhcp-vlan20 interface=vlan20 address-pool=pool-vlan20 disabled=no
-/ip dhcp-server network add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10,8.8.8.8
+/ip dhcp-server network add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10
 ```
 
 > Catatan: VLAN 30 (Server) **tidak perlu DHCP Server** karena server menggunakan IP static (192.168.30.10).
