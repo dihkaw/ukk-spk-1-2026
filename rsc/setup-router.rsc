@@ -83,8 +83,8 @@ add name=dhcp-vlan10 interface=vlan10 address-pool=pool-vlan10 disabled=no
 add name=dhcp-vlan20 interface=vlan20 address-pool=pool-vlan20 disabled=no
 
 /ip dhcp-server network
-add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.30.10,8.8.8.8
-add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10,8.8.8.8
+add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.30.10
+add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10
 
 # ---------------------------------------------------------------------
 # 7. NAT MASQUERADE (AKSES INTERNET UNTUK SEMUA VLAN)
