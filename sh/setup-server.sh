@@ -28,7 +28,7 @@ fi
 # ================= VARIABEL KONFIGURASI =================
 IP_ADDRESS="192.168.30.10"    # harus sama dengan IP static yang sudah diset manual
 DOMAIN="lab-smk.xyz"
-ALLOWED_RECURSION_NET="192.168.30.0/24"   # hanya VLAN 30 boleh recursive query
+ALLOWED_RECURSION_NET="192.168.30.0/24; 192.168.10.0/24"   # hanya VLAN 30 boleh recursive query
 WEBROOT="/var/www/${DOMAIN}"
 
 ROUTER_IP="192.168.30.1"       # IP Router MikroTik (VLAN 30) - SNMP client harus sudah "on"
@@ -73,9 +73,10 @@ options {
     directory "/var/cache/bind";
 
     recursion yes;
-    allow-recursion { allowed-recursion; };
+    allow-recursion { "allowed-recursion"; };
     // VLAN 20 (192.168.20.0/24) tidak termasuk allowed-recursion -> otomatis ditolak
-
+    allow-query-cache { "allowed-recursion"; };
+    
     listen-on { any; };
     listen-on-v6 { any; };
 
