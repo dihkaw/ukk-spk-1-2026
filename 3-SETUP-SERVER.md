@@ -112,7 +112,7 @@ options {
     // VLAN 20 (192.168.20.0/24) tidak termasuk allowed-recursion -> otomatis ditolak
 
     // WAJIB ditambahkan: Mengunci cache agar VLAN 20 tidak bisa mengintip cache
-    allow-query-cache { "allowed-recursion"; }
+    allow-query-cache { "allowed-recursion"; };
 
     listen-on { any; };
     listen-on-v6 { any; };
