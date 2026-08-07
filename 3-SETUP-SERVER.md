@@ -95,6 +95,7 @@ Ganti seluruh isinya menjadi:
 
 ```
 acl "allowed-recursion" {
+    192.168.10.0/24; // Tambahkan VLAN 10 agar Guru tetap bisa ke internetan
     192.168.30.0/24;
     localhost;
 };
@@ -102,9 +103,16 @@ acl "allowed-recursion" {
 options {
     directory "/var/cache/bind";
 
+    // Aktifkan rekursi
     recursion yes;
-    allow-recursion { allowed-recursion; };
+
+    // Gunakan tanda kutip ganda pada nama ACL
+    allow-recursion { "allowed-recursion"; };
+
     // VLAN 20 (192.168.20.0/24) tidak termasuk allowed-recursion -> otomatis ditolak
+
+    // WAJIB ditambahkan: Mengunci cache agar VLAN 20 tidak bisa mengintip cache
+    allow-query-cache { "allowed-recursion"; }
 
     listen-on { any; };
     listen-on-v6 { any; };
