@@ -3,7 +3,6 @@
 
 Tutorial ini menggunakan **WinBox versi terbaru** (v3.x / v4.x) untuk mengkonfigurasi **VM Router MikroTik (CHR)** sesuai topologi SPK Paket 1.
 
-### Persiapkan VM CHR yang dapat di[download](https://download.mikrotik.com/routeros/7.23.2/chr-7.23.2.ova) di situs resmi MikroTik dan dijalankan dengan pengaturan spesifikasi RAM sebesar 128MB dan penambahan Network Interface menjadi 3 (ether1: NAT; ether2: LAN Segment "Router-Switch"; ether3: Host Only)
 ---
 
 ## 📋 Topologi Router
@@ -24,15 +23,12 @@ Tutorial ini menggunakan **WinBox versi terbaru** (v3.x / v4.x) untuk mengkonfig
 
 ## 🔧 Persiapan
 
-1. [Download](https://download.mikrotik.com/routeros/winbox/3.43/winbox.exe) **WinBox terbaru** dari situs resmi MikroTik: `https://mikrotik.com/download`
+1. Download **WinBox terbaru** dari situs resmi MikroTik: `https://mikrotik.com/download`
 2. Buka WinBox, pada tab **Neighbors** klik **Refresh** untuk mendeteksi VM Router CHR.
 3. Klik pada MAC Address router yang muncul → klik **Connect** (login default: `admin`, password kosong).
 4. Setelah masuk, disarankan langsung reset konfigurasi default agar bersih:
    - Menu **System → Reset Configuration** → centang **No Default Configuration** → klik **Reset Configuration**.
    - Winbox akan terputus, sambungkan ulang via MAC Address.
-5. Buka menu **System  → Identity**.
-6. Isi **Identity**: *router-NamaAnda*
-7. Klik **Apply → OK**.
 
 ---
 
@@ -151,7 +147,7 @@ Gunakan **DHCP Setup Wizard** agar lebih cepat.
 3. **DHCP Address Space**: `192.168.10.0/24` → Next
 4. **Gateway for DHCP Network**: `192.168.10.1` → Next
 5. **Addresses to Give Out**: `192.168.10.10-192.168.10.254` → Next
-6. **DNS Servers**: `192.168.30.10` → Next
+6. **DNS Servers**: `192.168.30.10, 8.8.8.8` → Next
 7. **Lease Time**: default (`00:10:00` atau sesuaikan) → Next → **selesai**.
 
 ### DHCP Server VLAN 20 (Siswa)
@@ -165,11 +161,11 @@ Ulangi langkah yang sama dengan:
 ```
 /ip pool add name=pool-vlan10 ranges=192.168.10.10-192.168.10.254
 /ip dhcp-server add name=dhcp-vlan10 interface=vlan10 address-pool=pool-vlan10 disabled=no
-/ip dhcp-server network add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.30.10
+/ip dhcp-server network add address=192.168.10.0/24 gateway=192.168.10.1 dns-server=192.168.30.10,8.8.8.8
 
 /ip pool add name=pool-vlan20 ranges=192.168.20.10-192.168.20.254
 /ip dhcp-server add name=dhcp-vlan20 interface=vlan20 address-pool=pool-vlan20 disabled=no
-/ip dhcp-server network add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10
+/ip dhcp-server network add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10,8.8.8.8
 ```
 
 > Catatan: VLAN 30 (Server) **tidak perlu DHCP Server** karena server menggunakan IP static (192.168.30.10).
@@ -196,9 +192,31 @@ Ulangi langkah yang sama dengan:
 
 ## 8️⃣ Firewall Rules
 
-Buka menu **IP → Firewall → tab Filter Rules**. Tambahkan rule secara **berurutan** (urutan penting!):
+Buka menu **IP → Firewall → tab Filter Rules**. Tambahkan rule secara **berurutan** (urutan sangat penting — firewall MikroTik memproses rule dari atas ke bawah / top-down!):
 
-### a. Blok VLAN 20 akses ke VLAN 10
+### a. Izinkan VLAN 30 akses ke VLAN 10 (chain: forward)
+- **Chain**: `forward`
+- **Src. Address**: `192.168.30.0/24`
+- **Dst. Address**: `192.168.10.0/24`
+- **Action**: `accept`
+
+```
+/ip firewall filter add chain=forward src-address=192.168.30.0/24 dst-address=192.168.10.0/24 action=accept comment="Izinkan VLAN30 ke VLAN10"
+```
+
+### b. Log percobaan VLAN 20 ke VLAN 10 (chain: forward)
+- **Chain**: `forward`
+- **Src. Address**: `192.168.20.0/24`
+- **Dst. Address**: `192.168.10.0/24`
+- **Action**: `log`
+
+```
+/ip firewall filter add chain=forward src-address=192.168.20.0/24 dst-address=192.168.10.0/24 action=log log-prefix="BLOCKED-VLAN20: " comment="Log percobaan VLAN20 ke VLAN10"
+```
+
+> Rule `log` tidak menghentikan proses (tetap lanjut ke rule berikutnya), jadi harus diletakkan **sebelum** rule drop terkait.
+
+### c. Blok VLAN 20 akses ke VLAN 10 (chain: forward)
 - **Chain**: `forward`
 - **Src. Address**: `192.168.20.0/24`
 - **Dst. Address**: `192.168.10.0/24`
@@ -208,20 +226,37 @@ Buka menu **IP → Firewall → tab Filter Rules**. Tambahkan rule secara **beru
 /ip firewall filter add chain=forward src-address=192.168.20.0/24 dst-address=192.168.10.0/24 action=drop comment="Blok VLAN20 ke VLAN10"
 ```
 
-### b. Izinkan VLAN 30 akses ke VLAN 10
-- **Chain**: `forward`
-- **Src. Address**: `192.168.30.0/24`
-- **Dst. Address**: `192.168.10.0/24`
-- **Action**: `accept`
+> ⚠️ Urutan a → b → c di atas **wajib** seperti ini: accept VLAN30 duluan, baru log, baru drop VLAN20. Karena keduanya beda subnet source, urutan antar rule VLAN30 dan VLAN20 sebenarnya tidak saling mempengaruhi, tapi tetap disusun begini agar konsisten dan mudah dibaca top-down.
+
+---
+
+### d. Izinkan Akses SSH/Winbox dari VLAN 10 & VLAN 30 (chain: input) — **HARUS PALING ATAS**
+
+⚠️ **Penting:** rule ini **wajib diletakkan paling atas** di chain `input`, **sebelum** rule logging dan mekanisme anti brute-force di bawah. Alasannya: kalau diletakkan di bawah, setiap kali admin dari VLAN10/VLAN30 melakukan reconnect Winbox berkali-kali (hal yang wajar terjadi saat sesi Winbox putus-nyambung), IP admin tersebut akan ikut tercatat naik bertahap oleh sistem staging (stage1 → stage2 → stage3 → **blacklist**) dan akhirnya **admin sendiri bisa terkunci** dari router. Dengan meletakkan rule accept ini paling atas, trafik dari VLAN10/VLAN30 langsung diterima tanpa pernah masuk ke sistem staging/blacklist sama sekali — mekanisme brute-force hanya akan menyaring percobaan dari VLAN20 atau sumber luar yang tidak sah.
 
 ```
-/ip firewall filter add chain=forward src-address=192.168.30.0/24 dst-address=192.168.10.0/24 action=accept comment="Izinkan VLAN30 ke VLAN10" place-before=0
+/ip firewall filter add chain=input protocol=tcp dst-port=22,8291 src-address=192.168.10.0/24 action=accept comment="Izinkan akses VLAN10 ke router"
+
+/ip firewall filter add chain=input protocol=tcp dst-port=22,8291 src-address=192.168.30.0/24 action=accept comment="Izinkan akses VLAN30 ke router"
 ```
 
-> ⚠️ Pastikan rule **"Izinkan VLAN 30"** berada **di atas (place-before)** rule blok, atau tambahkan rule accept ini duluan sebelum rule drop VLAN20, supaya urutan eksekusi firewall benar (top-down).
+> 💡 Tidak perlu memakai opsi `place-before` — cukup **tambahkan rule ini duluan** (sebelum rule logging/staging di langkah e & f), karena `/ip firewall filter add` otomatis menaruh rule baru di baris paling bawah sesuai urutan penambahan. `place-before` justru berisiko salah, karena penomoran index di firewall MikroTik bersifat **global** (lintas semua chain), bukan khusus per-chain.
 
-### c. Amankan Brute-Force Login (SSH/Winbox)
-Buat 3 rule berurutan untuk mendeteksi & blok percobaan login berulang:
+⚠️ **Uji dulu sebelum logout!** Pastikan kamu masih terkoneksi dari VLAN 10 atau VLAN 30 (atau Ether3 Host-Only) sebelum melanjutkan ke rule drop di bagian f — kalau salah urutan, kamu bisa terkunci dari router.
+
+### e. Logging Percobaan Akses SSH/Winbox (chain: input)
+
+```
+/ip firewall filter add chain=input protocol=tcp dst-port=22,8291 action=log log-prefix="LOGIN-ATTEMPT: " comment="Log percobaan akses SSH/Winbox"
+```
+
+Untuk melihat log: menu **Log** di WinBox, atau via terminal:
+```
+/log print
+```
+
+### f. Amankan Brute-Force Login (chain: input)
+Buat rule berurutan untuk mendeteksi & blok percobaan login berulang dari sumber yang **belum** diterima oleh rule accept VLAN10/30 di atas:
 
 ```
 /ip firewall filter add chain=input protocol=tcp dst-port=22,8291 connection-state=new src-address-list=ssh_blacklist action=drop comment="Drop brute force SSH/Winbox"
@@ -235,36 +270,31 @@ Buat 3 rule berurutan untuk mendeteksi & blok percobaan login berulang:
 /ip firewall filter add chain=input protocol=tcp dst-port=22,8291 connection-state=new action=add-src-to-address-list address-list=ssh_stage1 address-list-timeout=1m comment="New connection attempt"
 ```
 
-**Cara kerja:** setiap percobaan koneksi baru ke port SSH (22) atau Winbox (8291) akan dicatat bertahap (stage1 → stage2 → stage3). Jika IP yang sama mencoba lagi dalam rentang waktu singkat, IP tersebut otomatis masuk **blacklist** dan diblokir selama 1 hari.
+**Cara kerja:** setiap percobaan koneksi baru ke port SSH (22) atau Winbox (8291) **yang tidak berasal dari VLAN10/VLAN30** (karena sudah di-accept duluan di rule d) akan dicatat bertahap (stage1 → stage2 → stage3). Jika IP yang sama mencoba lagi dalam rentang waktu singkat, IP tersebut otomatis masuk **blacklist** dan diblokir selama 1 hari.
 
-### d. Logging Aktivitas Penting
+> 💡 **Catatan:** address-list (`ssh_stage1`, `ssh_stage2`, `ssh_stage3`, `ssh_blacklist`) **tidak perlu dibuat manual** di menu Address Lists. RouterOS otomatis membuatnya begitu ada traffic yang men-trigger action `add-src-to-address-list` pertama kali. Jadi wajar kalau menu **IP → Firewall → Address Lists** masih kosong sebelum ada percobaan koneksi.
 
-```
-/ip firewall filter add chain=input protocol=tcp dst-port=22,8291 action=log log-prefix="LOGIN-ATTEMPT: " comment="Log percobaan akses SSH/Winbox"
+### g. Blok Semua Akses SSH/Winbox Selain VLAN 10 & VLAN 30 (chain: input) — paling bawah
 
-/ip firewall filter add chain=forward src-address=192.168.20.0/24 dst-address=192.168.10.0/24 action=log log-prefix="BLOCKED-VLAN20: " comment="Log percobaan VLAN20 ke VLAN10"
-```
-
-> Letakkan rule **log** ini **sebelum** rule drop/accept terkait, karena firewall MikroTik memproses top-down dan rule `log` tidak menghentikan proses (tetap lanjut ke rule berikutnya).
-
-Untuk melihat log: menu **Log** di WinBox, atau via terminal:
-```
-/log print
-```
-
-### e. Amankan Akses Router — SSH/Winbox Hanya dari VLAN 10 & 30
-
-Tambahkan rule berikut **di bagian bawah** (sebelum rule "drop all" jika ada), untuk membatasi siapa saja yang boleh mengakses router:
+Rule penutup (catch-all) di bagian paling bawah chain input untuk port SSH/Winbox:
 
 ```
-/ip firewall filter add chain=input protocol=tcp dst-port=22,8291 src-address=192.168.10.0/24 action=accept comment="Izinkan akses VLAN10 ke router"
-
-/ip firewall filter add chain=input protocol=tcp dst-port=22,8291 src-address=192.168.30.0/24 action=accept comment="Izinkan akses VLAN30 ke router"
-
 /ip firewall filter add chain=input protocol=tcp dst-port=22,8291 action=drop comment="Blok akses SSH/Winbox selain VLAN10 & VLAN30"
 ```
 
-⚠️ **Uji dulu sebelum logout!** Pastikan kamu masih terkoneksi dari VLAN 10 atau VLAN 30 (atau Ether3 Host-Only) sebelum menerapkan rule terakhir ini — kalau salah, kamu bisa terkunci dari router.
+### 📌 Urutan Akhir Chain Input (SSH/Winbox) — Ringkasan
+
+| # | Rule | Alasan urutan |
+|---|---|---|
+| 1 | Accept VLAN10 → router | Wajib paling atas, hindari admin ikut ter-blacklist saat reconnect |
+| 2 | Accept VLAN30 → router | Sama seperti di atas |
+| 3 | Log percobaan akses SSH/Winbox | Mencatat sisa traffic yang bukan dari VLAN10/30 |
+| 4 | Drop jika src di `ssh_blacklist` | Traffic yang sudah lolos ke titik ini otomatis bukan dari VLAN10/30 |
+| 5 | Stage3 → blacklist | Eskalasi bertahap |
+| 6 | Stage2 → stage3 | Eskalasi bertahap |
+| 7 | Stage1 → stage2 | Eskalasi bertahap |
+| 8 | New connection → stage1 | Awal pencatatan percobaan baru |
+| 9 | Drop semua sisanya (catch-all) | Penutup, blok semua yang tidak match rule di atas |
 
 ---
 
@@ -276,7 +306,7 @@ Cek semua konfigurasi berjalan dengan baik:
 /interface vlan print          → pastikan vlan10, vlan20, vlan30 aktif
 /ip address print              → pastikan IP tiap VLAN sudah benar
 /ip dhcp-server print          → pastikan DHCP vlan10 & vlan20 running
-/ip firewall filter print      → cek urutan rule firewall
+/ip firewall filter print      → cek urutan rule firewall (pastikan urutan sesuai tabel di atas)
 /ip firewall nat print         → cek rule masquerade
 /snmp print                    → pastikan SNMP enabled
 /ping 8.8.8.8                  → tes koneksi internet dari router
@@ -290,4 +320,4 @@ Uji dari sisi client:
 
 ---
 
-**Selanjutnya:** lanjut ke [`2-SETUP-SWITCH.md`](./2-SETUP-SWITCH.md) untuk konfigurasi VM Switch MikroTik (CHR).
+**Selanjutnya:** lanjut ke [`2-setup-switch.md`](./2-setup-switch.md) untuk konfigurasi VM Switch MikroTik (CHR).
