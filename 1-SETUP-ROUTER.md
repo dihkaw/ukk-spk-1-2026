@@ -156,6 +156,7 @@ Ulangi langkah yang sama dengan:
 - Address Space: `192.168.20.0/24`
 - Gateway: `192.168.20.1`
 - Pool: `192.168.20.10-192.168.20.254`
+- DHCP Server: `192.168.20.10` (tanpa 8.8.8.8)   
 
 **Terminal equivalent (ringkas, tanpa wizard):**
 ```
@@ -165,7 +166,7 @@ Ulangi langkah yang sama dengan:
 
 /ip pool add name=pool-vlan20 ranges=192.168.20.10-192.168.20.254
 /ip dhcp-server add name=dhcp-vlan20 interface=vlan20 address-pool=pool-vlan20 disabled=no
-/ip dhcp-server network add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10,8.8.8.8
+/ip dhcp-server network add address=192.168.20.0/24 gateway=192.168.20.1 dns-server=192.168.30.10
 ```
 
 > Catatan: VLAN 30 (Server) **tidak perlu DHCP Server** karena server menggunakan IP static (192.168.30.10).
