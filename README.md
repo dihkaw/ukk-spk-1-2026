@@ -35,7 +35,7 @@ Total ada **5 VM** yang harus dibuat di hypervisor (VirtualBox / VMware / Proxmo
 ### Network Interface (3 buah)
 | Interface | Tipe Adapter di Hypervisor | Fungsi |
 |---|---|---|
-| Ether1 | **Bridged / NAT** (ke internet) | DHCP Client — akses internet |
+| Ether1 | **NAT** (ke internet) | DHCP Client — akses internet |
 | Ether2 | **Internal Network**: `Router-Switch` | Trunk ke Switch (VLAN 10/20/30) |
 | Ether3 | **Host-Only Adapter** | Akses Winbox langsung dari PC Admin |
 
