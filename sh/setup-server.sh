@@ -59,7 +59,7 @@ if ! ping -c 2 8.8.8.8 >/dev/null 2>&1; then
     exit 1
 fi
 echo "   OK - IP: ${ALL_IPS}, internet: terkoneksi."
-iif [ -z "${MGMT_IP}" ]; then
+if [ -z "${MGMT_IP}" ]; then
     echo "   Catatan: NIC Host-Only belum mendapat IP (cek DHCP Host-Only di VMware), PuTTY dari PC host belum bisa dipakai."
 else
     echo "   NIC Host-Only terdeteksi: ${MGMT_IP} (untuk PuTTY dari PC host)."
