@@ -8,8 +8,13 @@
 #
 #  CATATAN:
 #  Script ini TIDAK mengubah konfigurasi IP.
-#  IP Static (192.168.30.10/24) harus SUDAH dikonfigurasi manual
-#  dan server sudah bisa akses internet SEBELUM script ini dijalankan.
+#  - IP Static NIC 1 (192.168.30.10/24, VLAN 30) harus SUDAH dikonfigurasi
+#    manual dan server sudah bisa akses internet SEBELUM script ini jalan.
+#  - NIC 2 (Host-Only, IP dinamis dari DHCP)
+#    netplan agar server bisa diakses lewat PuTTY dari PC host
+#    (copy-paste dari konsol VMware sering terpotong).
+#  - Landing page berupa SATU file: /var/www/lab-smk.xyz/index.html (CSS
+#    dan JS ada di dalamnya). Siswa WAJIB mengganti identitas di file ini.
 #
 #  Cara pakai:
 #    sudo chmod +x setup-server.sh
@@ -27,6 +32,7 @@ fi
 
 # ================= VARIABEL KONFIGURASI =================
 IP_ADDRESS="192.168.30.10"    # harus sama dengan IP static yang sudah diset manual
+MGMT_IP=$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | grep -vx "${IP_ADDRESS}" | head -n1)   # IP NIC 2 (Host-Only, DHCP) untuk PuTTY
 DOMAIN="lab-smk.xyz"
 ALLOWED_RECURSION_NETS="192.168.30.0/24; 192.168.10.0/24"   # VLAN 30 & VLAN 10 boleh recursive query (VLAN 20 tidak)
 WEBROOT="/var/www/${DOMAIN}"
@@ -39,9 +45,9 @@ echo " Memulai konfigurasi server ${DOMAIN} (${IP_ADDRESS})"
 echo "======================================================"
 
 # --------- Cek dulu apakah IP server sudah sesuai & internet nyambung ----------
-CURRENT_IP=$(hostname -I | awk '{print $1}')
-if [ "$CURRENT_IP" != "$IP_ADDRESS" ]; then
-    echo ">> PERINGATAN: IP server saat ini (${CURRENT_IP}) berbeda dengan ${IP_ADDRESS}."
+ALL_IPS=$(hostname -I)
+if ! echo " ${ALL_IPS} " | grep -q " ${IP_ADDRESS} "; then
+    echo ">> PERINGATAN: IP ${IP_ADDRESS} tidak ditemukan. IP server saat ini: ${ALL_IPS}"
     echo "   Pastikan IP static sudah dikonfigurasi manual sebelum lanjut."
     read -p "   Lanjutkan tetap? (y/n): " confirm
     [ "$confirm" != "y" ] && exit 1
@@ -52,11 +58,24 @@ if ! ping -c 2 8.8.8.8 >/dev/null 2>&1; then
     echo "   Selesaikan konfigurasi IP static & gateway secara manual dulu."
     exit 1
 fi
-echo "   OK - IP: ${CURRENT_IP}, internet: terkoneksi."
+echo "   OK - IP: ${ALL_IPS}, internet: terkoneksi."
+iif [ -z "${MGMT_IP}" ]; then
+    echo "   Catatan: NIC Host-Only belum mendapat IP (cek DHCP Host-Only di VMware), PuTTY dari PC host belum bisa dipakai."
+else
+    echo "   NIC Host-Only terdeteksi: ${MGMT_IP} (untuk PuTTY dari PC host)."
+fi
+fi
 
 # ================= 1. UPDATE SISTEM =================
-echo ">> [1/5] Update repository & sistem..."
+echo ">> [1/5] Update sistem, zona waktu, dan SSH server..."
 apt update -y && apt upgrade -y
+
+# Zona waktu WIB agar log berwaktu benar
+timedatectl set-timezone Asia/Jakarta
+
+# SSH server (untuk PuTTY dari PC host lewat NIC Host-Only)
+apt install -y openssh-server
+systemctl enable --now ssh
 
 # ================= 2. INSTALL & KONFIGURASI BIND9 (DNS SERVER) =================
 echo ">> [2/5] Install & konfigurasi BIND9 (DNS Server)..."
@@ -126,231 +145,113 @@ apt install -y nginx openssl
 mkdir -p "${WEBROOT}"
 mkdir -p /etc/nginx/ssl
 
-# --- Landing Page: index.html ---
+# --- Landing Page: SATU file index.html (CSS dan JS di dalamnya) ---
+# Siswa WAJIB mengganti blok "var DATA" di bagian atas file agar halaman autentik.
 cat > "${WEBROOT}/index.html" <<'HTMLEOF'
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPK Paket 1 - Lab SMK</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab SMK - Landing Page</title>
+<style>
+  /* ===== GANTI WARNA TEMA DI SINI ===== */
+  :root { --utama: #2563eb; --gelap: #0f172a; --terang: #f1f5f9; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; background: var(--terang); color: #1e293b; line-height: 1.6; }
+  .hero { background: linear-gradient(135deg, var(--gelap), var(--utama)); color: #fff; text-align: center; padding: 80px 20px 90px; }
+  .hero .label { display: inline-block; background: rgba(255,255,255,.15); padding: 4px 14px; border-radius: 20px; font-size: .85rem; margin-bottom: 16px; }
+  .hero h1 { font-size: 2.4rem; margin-bottom: 8px; }
+  .hero p { color: #cbd5e1; }
+  .badge { display: inline-block; margin-top: 22px; background: #22c55e; color: #052e16; font-weight: 600; padding: 8px 18px; border-radius: 8px; font-size: .9rem; }
+  .badge.http { background: #f59e0b; color: #451a03; }
+  main { max-width: 960px; margin: -40px auto 40px; padding: 0 20px; }
+  .box { background: #fff; border-radius: 14px; padding: 26px; margin-bottom: 20px; box-shadow: 0 6px 18px rgba(15,23,42,.08); }
+  h2 { color: var(--gelap); margin-bottom: 12px; font-size: 1.25rem; }
+  .cards { display: flex; gap: 16px; flex-wrap: wrap; }
+  .card { flex: 1 1 200px; border-top: 4px solid var(--utama); background: var(--terang); border-radius: 10px; padding: 18px; }
+  .card h3 { font-size: 1rem; color: var(--utama); margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 9px 4px; border-bottom: 1px solid #e2e8f0; }
+  td:first-child { color: #64748b; width: 40%; }
+  .btn { display: inline-block; margin-top: 10px; background: var(--utama); color: #fff; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; }
+  .btn:hover { opacity: .9; }
+  footer { text-align: center; padding: 24px; color: #64748b; font-size: .9rem; }
+</style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="logo">Lab-SMK.xyz</div>
-        <ul class="nav-links">
-            <li><a href="#home">Home</a></li>
-            <li><a href="#tentang">Tentang</a></li>
-            <li><a href="#layanan">Layanan</a></li>
-            <li><a href="#kontak">Kontak</a></li>
-        </ul>
-    </nav>
 
-    <header id="home" class="hero">
-        <h1>Selamat Datang di Server SPK Paket 1</h1>
-        <p>Landing page ini disajikan oleh Nginx pada Ubuntu Server 24.04</p>
-        <button id="btnCek" class="btn">Cek Status Server</button>
-        <p id="statusOutput"></p>
-    </header>
+<!-- ============================================================
+     WAJIB GANTI: isi data diri kamu di bagian ini saja.
+     Bagian lain boleh diubah sesuka hati (teks, warna, urutan).
+     ============================================================ -->
+<script>
+  var DATA = {
+    nama:       "NAMA SISWA",
+    kelas:      "XII TKJ",
+    noUjian:    "00-TKJ-000",
+    sekolah:    "SMK XYZ",
+    tagline:    "Server DNS, Web, dan Monitoring Real-Time",
+    dns:        "BIND9",
+    web:        "Nginx",
+    monitoring: "Netdata"
+  };
+</script>
 
-    <section id="tentang" class="section">
-        <h2>Tentang Topologi</h2>
-        <p>Server ini merupakan bagian dari topologi UKK TKJ SPK Paket 1, dengan
-        layanan DNS, Web Server, dan Monitoring yang berjalan pada satu VM Ubuntu/Debian
-        di VLAN 30 (192.168.30.10/24).</p>
-    </section>
+<header class="hero">
+  <span class="label"><span data-isi="sekolah"></span> | UKK TKJ 2026</span>
+  <h1><span data-isi="nama"></span></h1>
+  <p><span data-isi="kelas"></span> &middot; No. Ujian <span data-isi="noUjian"></span></p>
+  <p data-isi="tagline"></p>
+  <div id="badge" class="badge">Memeriksa koneksi...</div>
+</header>
 
-    <section id="layanan" class="section alt">
-        <h2>Layanan Server</h2>
-        <div class="cards">
-            <div class="card">
-                <h3>DNS Server</h3>
-                <p>BIND9 - domain lab-smk.xyz</p>
-            </div>
-            <div class="card">
-                <h3>Web Server</h3>
-                <p>Nginx + HTTPS Self-Signed</p>
-            </div>
-            <div class="card">
-                <h3>Monitoring</h3>
-                <p>Netdata - monitor.lab-smk.xyz</p>
-            </div>
-        </div>
-    </section>
+<main>
+  <section class="box">
+    <h2>Layanan Server</h2>
+    <div class="cards">
+      <div class="card"><h3>DNS Server</h3><span data-isi="dns"></span> &middot; zona lab-smk.xyz</div>
+      <div class="card"><h3>Web Server</h3><span data-isi="web"></span> &middot; HTTPS self-signed</div>
+      <div class="card"><h3>Monitoring</h3><span data-isi="monitoring"></span> &middot; Router dan Server</div>
+    </div>
+  </section>
 
-    <section id="kontak" class="section">
-        <h2>Kontak</h2>
-        <p>Admin Lab SMK &mdash; admin@lab-smk.xyz</p>
-    </section>
+  <section class="box">
+    <h2>Informasi Jaringan</h2>
+    <table>
+      <tr><td>Domain</td><td>lab-smk.xyz</td></tr>
+      <tr><td>Alamat IP Server</td><td>192.168.30.10 (VLAN 30)</td></tr>
+      <tr><td>Alamat halaman ini</td><td id="alamat">-</td></tr>
+      <tr><td>Waktu akses</td><td id="waktu">-</td></tr>
+    </table>
+    <a class="btn" href="https://monitor.lab-smk.xyz">Buka Dashboard Monitoring</a>
+  </section>
+</main>
 
-    <footer>
-        <p>&copy; 2026 UKK TKJ - SPK Paket 1</p>
-    </footer>
+<footer>&copy; 2026 <span data-isi="nama"></span> &middot; <span data-isi="sekolah"></span></footer>
 
-    <script src="script.js"></script>
+<script>
+  // Mengisi semua teks dari DATA di atas
+  document.querySelectorAll("[data-isi]").forEach(function (el) {
+    el.textContent = DATA[el.getAttribute("data-isi")] || "";
+  });
+  document.title = DATA.nama + " - " + DATA.sekolah;
+
+  // Status HTTPS, alamat, dan waktu
+  var aman = location.protocol === "https:";
+  var badge = document.getElementById("badge");
+  badge.textContent = aman ? "Dibuka lewat HTTPS (terenkripsi)" : "Dibuka lewat HTTP (tidak terenkripsi)";
+  if (!aman) badge.className = "badge http";
+  document.getElementById("alamat").textContent = location.href;
+  document.getElementById("waktu").textContent = new Date().toLocaleString("id-ID");
+</script>
 </body>
 </html>
 HTMLEOF
 
-# --- style.css ---
-cat > "${WEBROOT}/style.css" <<'CSSEOF'
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', Arial, sans-serif;
-}
-
-body {
-    background-color: #f4f6f8;
-    color: #222;
-    scroll-behavior: smooth;
-}
-
-.navbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: #0f172a;
-    padding: 16px 40px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.navbar .logo {
-    color: #38bdf8;
-    font-weight: bold;
-    font-size: 1.3rem;
-}
-
-.nav-links {
-    list-style: none;
-    display: flex;
-    gap: 24px;
-}
-
-.nav-links a {
-    color: #e2e8f0;
-    text-decoration: none;
-    font-weight: 500;
-    transition: color 0.2s;
-}
-
-.nav-links a:hover {
-    color: #38bdf8;
-}
-
-.hero {
-    background: linear-gradient(135deg, #0f172a, #1e3a8a);
-    color: white;
-    text-align: center;
-    padding: 100px 20px;
-}
-
-.hero h1 {
-    font-size: 2.4rem;
-    margin-bottom: 12px;
-}
-
-.hero p {
-    margin-bottom: 24px;
-    color: #cbd5e1;
-}
-
-.btn {
-    background-color: #38bdf8;
-    color: #0f172a;
-    border: none;
-    padding: 12px 28px;
-    border-radius: 6px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: transform 0.2s, background-color 0.2s;
-}
-
-.btn:hover {
-    background-color: #0ea5e9;
-    transform: translateY(-2px);
-}
-
-#statusOutput {
-    margin-top: 16px;
-    font-weight: bold;
-    color: #4ade80;
-}
-
-.section {
-    padding: 60px 40px;
-    max-width: 900px;
-    margin: 0 auto;
-}
-
-.section.alt {
-    background-color: #eef2f6;
-    max-width: 100%;
-}
-
-.section h2 {
-    margin-bottom: 16px;
-    color: #0f172a;
-}
-
-.cards {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-    margin-top: 20px;
-}
-
-.card {
-    background: white;
-    border-radius: 10px;
-    padding: 24px;
-    width: 220px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-    text-align: center;
-    transition: transform 0.2s;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-}
-
-footer {
-    text-align: center;
-    padding: 20px;
-    background-color: #0f172a;
-    color: #94a3b8;
-}
-CSSEOF
-
-# --- script.js ---
-cat > "${WEBROOT}/script.js" <<'JSEOF'
-document.addEventListener('DOMContentLoaded', function () {
-    const btn = document.getElementById('btnCek');
-    const output = document.getElementById('statusOutput');
-
-    btn.addEventListener('click', function () {
-        const now = new Date();
-        output.textContent = 'Server aktif - waktu cek: ' + now.toLocaleString('id-ID');
-    });
-
-    // Efek scroll aktif pada navbar
-    const navbar = document.querySelector('.navbar');
-    window.addEventListener('scroll', function () {
-        if (window.scrollY > 50) {
-            navbar.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-        } else {
-            navbar.style.boxShadow = 'none';
-        }
-    });
-});
-JSEOF
-
 chown -R www-data:www-data "${WEBROOT}"
+chmod 644 "${WEBROOT}/index.html"
 
 # --- Buat sertifikat self-signed untuk HTTPS ---
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/${DOMAIN}.key -out /etc/nginx/ssl/${DOMAIN}.crt -subj "/C=ID/ST=JawaTengah/L=Purwokerto/O=SMK/OU=TKJ/CN=${DOMAIN}"
@@ -500,7 +401,7 @@ echo "   Monitoring aktif via HTTPS: https://monitor.${DOMAIN}"
 # ================= 6. FIREWALL DASAR SERVER (UFW) =================
 echo ">> [5/5] Konfigurasi firewall dasar (UFW) pada server..."
 apt install -y ufw
-ufw allow 22/tcp      # SSH
+ufw allow 22/tcp      # SSH (PuTTY dari PC host lewat NIC Host-Only)
 ufw allow 53          # DNS
 ufw allow 80/tcp      # HTTP
 ufw allow 443/tcp     # HTTPS
@@ -514,6 +415,8 @@ echo " - Web   : https://${DOMAIN}  (atau https://${IP_ADDRESS})"
 echo " - Monitor: https://monitor.${DOMAIN}   (port 19999 tertutup dari luar)"
 echo "   Host di monitoring: 'server' (localhost) & 'router' (${ROUTER_IP} via SNMP)"
 echo "   Verifikasi SNMP router: snmpwalk -v2c -c ${SNMP_COMMUNITY} ${ROUTER_IP} system"
+echo " WAJIB: ganti identitas siswa di ${WEBROOT}/index.html"
+echo "   (PuTTY ke ${MGMT_IP:-<IP NIC Host-Only>}, lalu: sudo nano ${WEBROOT}/index.html)"
 echo " Pastikan client (VLAN 10/20/30) mengarahkan DNS ke ${IP_ADDRESS}"
 echo " agar domain ${DOMAIN} bisa di-resolve."
 echo "======================================================"
