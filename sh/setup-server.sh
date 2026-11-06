@@ -64,7 +64,6 @@ if [ -z "${MGMT_IP}" ]; then
 else
     echo "   NIC Host-Only terdeteksi: ${MGMT_IP} (untuk PuTTY dari PC host)."
 fi
-fi
 
 # ================= 1. UPDATE SISTEM =================
 echo ">> [1/5] Update sistem, zona waktu, dan SSH server..."
