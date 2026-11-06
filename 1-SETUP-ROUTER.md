@@ -341,19 +341,25 @@ Rule penutup (catch-all). Pastikan kamu masih terhubung dari VLAN 10/30 sebelum 
 /ip firewall filter add chain=input protocol=tcp dst-port=22,8291 action=drop comment="Blok akses SSH/Winbox selain VLAN10 & VLAN30"
 ```
 
-### 📌 Urutan Akhir Chain Input (SSH/Winbox) — Ringkasan
+### 📌 Urutan Akhir Keseluruhan Filter Rules Firewall (Semua Chain) — Ringkasan
 
-| # | Rule | Alasan urutan |
-|---|---|---|
-| 1 | Drop jika src di `blacklist` | Di atas accept, agar blacklist berlaku juga untuk VLAN 10/30 |
-| 2 | Log koneksi baru SSH/Winbox | Setelah drop blacklist, agar IP yang diblokir tidak membanjiri log |
-| 3 | Stage3 → blacklist | Stage tertinggi dulu, agar tiap paket hanya naik satu tingkat |
-| 4 | Stage2 → stage3 | Sama |
-| 5 | Stage1 → stage2 | Sama |
-| 6 | New connection → stage1 | Harus paling bawah dari empat rule staging |
-| 7 | Accept VLAN10 → router | Setelah staging, agar login berulang tetap terhitung |
-| 8 | Accept VLAN30 → router | Sama |
-| 9 | Drop semua sisanya (catch-all) | Penutup: blok semua sumber selain VLAN 10/30 |
+| # | Chain | Rule / Target Filter | Action | Alasan Urutan / Deskripsi |
+|---|---|---|---|---|
+| 1 | `forward` | Connection State: `established,related` | `accept` | Memungkinkan balasan paket dari koneksi yang sah (misal Guru ke Siswa). Wajib diletakkan di posisi paling atas chain `forward`. |
+| 2 | `forward` | Src: `192.168.30.0/24`, Dst: `192.168.10.0/24` | `accept` | Mengizinkan Server (VLAN 30) mengakses Jaringan Guru (VLAN 10). |
+| 3 | `forward` | Src: `192.168.20.0/24`, Dst: `192.168.10.0/24` | `log` | Mencatat percobaan akses Siswa (VLAN 20) ke Guru (VLAN 10). Tepat sebelum rule drop agar tidak melewatkan pencatatan. |
+| 4 | `forward` | Src: `192.168.20.0/24`, Dst: `192.168.10.0/24` | `drop` | Memblokir akses Siswa (VLAN 20) ke Guru (VLAN 10). |
+| 5 | `forward` | Src: `192.168.20.0/24`, Dst: `192.168.30.0/24` | `accept` | Mengizinkan Siswa (VLAN 20) mengakses Server (VLAN 30). Harus berada di atas rule drop catch-all Siswa. |
+| 6 | `forward` | Src: `192.168.20.0/24` | `drop` | Memblokir akses Siswa (VLAN 20) ke seluruh tujuan lain (termasuk Internet). |
+| 7 | `input` | Port SSH/Winbox (22,8291), State: `new`, Src: `blacklist` | `drop` | Menghentikan IP blacklist di baris paling atas chain `input` agar tidak lolos oleh rule accept VLAN 10/30. |
+| 8 | `input` | Port SSH/Winbox (22,8291), State: `new` | `log` | Mencatat percobaan koneksi SSH/Winbox baru, diletakkan setelah drop blacklist agar log tidak dipenuhi IP terblokir. |
+| 9 | `input` | Port SSH/Winbox (22,8291), State: `new`, Src: `ssh_stage3` | `add-src-to-address-list` (`blacklist`) | Staging tahap 3: percobaan ke-4 memasukkan IP ke `blacklist` (timeout 1 hari). |
+| 10 | `input` | Port SSH/Winbox (22,8291), State: `new`, Src: `ssh_stage2` | `add-src-to-address-list` (`ssh_stage3`) | Staging tahap 2: percobaan ke-3 memindahkan IP ke `ssh_stage3` (timeout 1m). |
+| 11 | `input` | Port SSH/Winbox (22,8291), State: `new`, Src: `ssh_stage1` | `add-src-to-address-list` (`ssh_stage2`) | Staging tahap 1: percobaan ke-2 memindahkan IP ke `ssh_stage2` (timeout 1m). |
+| 12 | `input` | Port SSH/Winbox (22,8291), State: `new` | `add-src-to-address-list` (`ssh_stage1`) | Connection `new` pertama kali dimasukkan ke `ssh_stage1` (paling bawah dari 4 rule staging). |
+| 13 | `input` | Port SSH/Winbox (22,8291), Src: `192.168.10.0/24` | `accept` | Mengizinkan akses SSH/Winbox ke router dari VLAN 10 (Guru), diletakkan setelah staging agar login berulang tetap terhitung. |
+| 14 | `input` | Port SSH/Winbox (22,8291), Src: `192.168.30.0/24` | `accept` | Mengizinkan akses SSH/Winbox ke router dari VLAN 30 (Server), diletakkan setelah staging. |
+| 15 | `input` | Port SSH/Winbox (22,8291) | `drop` | Rule penutup (catch-all): memblokir akses SSH/Winbox dari semua sumber selain VLAN 10 & 30. |
 
 ---
 
