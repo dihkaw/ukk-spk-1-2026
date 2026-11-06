@@ -3,10 +3,13 @@
 
 Server ini akan menjalankan 3 layanan: **DNS (bind9)**, **Web (nginx + HTTPS)**, dan **Monitoring (netdata + SNMP router)**, sesuai topologi VLAN 30 (`192.168.30.10/24`).
 
+> 💡 **Kerjakan lewat PuTTY dari PC host, bukan lewat konsol VMware.** Copy-paste ke konsol VMware sering terpotong (tidak lengkap). Karena itu server memakai **NIC kedua (Host-Only)** untuk akses SSH. Konsol VMware hanya dipakai di bagian 1 dan 1b (perintah pendek), lalu semuanya dikerjakan dari PuTTY.
+
 ---
 
 ## 📋 Daftar Isi
-1. [Konfigurasi IP Static](#1-konfigurasi-ip-static)
+1. [Konfigurasi IP Static (2 NIC)](#1-konfigurasi-ip-static)
+   - [1b. Akses Server lewat PuTTY](#1b-akses-server-lewat-putty-dari-pc-host)
 2. [Update Sistem](#2-update-sistem)
 3. [Instalasi & Konfigurasi DNS Server (bind9)](#3-instalasi--konfigurasi-dns-server-bind9)
 4. [Instalasi & Konfigurasi Web Server (nginx + HTTPS)](#4-instalasi--konfigurasi-web-server-nginx--https)
@@ -18,25 +21,32 @@ Server ini akan menjalankan 3 layanan: **DNS (bind9)**, **Web (nginx + HTTPS)**,
 
 ## 1. Konfigurasi IP Static
 
-Masuk ke server (via console/VM), lalu edit file netplan:
+Server memakai **dua NIC**:
 
-```bash
-sudo nano /etc/netplan/50-cloud-init.yaml
-```
+| NIC | Adapter di VMware | Alamat | Fungsi |
+|---|---|---|---|
+| NIC 1 (mis. `ens33`) | LAN Segment `Switch-Server` | `192.168.30.10/24`, gateway `192.168.30.1` | VLAN 30: DNS, Web, Monitoring |
+| NIC 2 (mis. `ens34`) | Host-Only | IP **dinamis** (DHCP dari VMware), tanpa default route | Management: PuTTY dari PC host |
 
-Cek dulu nama interface yang terpasang:
+Masuk lewat **konsol VMware** (hanya untuk bagian ini), lalu cek nama interface yang terpasang:
 
 ```bash
 ip a
 ```
 
-Isi/edit file netplan menjadi:
+Edit file netplan:
+
+```bash
+sudo nano /etc/netplan/50-cloud-init.yaml
+```
+
+Isi/edit menjadi:
 
 ```yaml
 network:
   version: 2
   ethernets:
-    ens33:                      # ganti sesuai nama interface asli hasil 'ip a'
+    ens33:                      # NIC 1 (VLAN 30) - ganti sesuai nama hasil 'ip a'
       dhcp4: no
       addresses:
         - 192.168.30.10/24
@@ -45,7 +55,14 @@ network:
           via: 192.168.30.1     # gateway VLAN 30 dari router MikroTik
       nameservers:
         addresses: [8.8.8.8, 1.1.1.1]   # sementara DNS publik dulu
+    ens34:                      # NIC 2 (Host-Only) - ganti sesuai nama hasil 'ip a'
+      dhcp4: yes
+      dhcp4-overrides:
+        use-routes: false       # jangan ambil default route dari DHCP Host-Only
+        use-dns: false          # jangan ambil DNS dari DHCP Host-Only
 ```
+
+> ⚠️ Pastikan **DHCP Host-Only aktif** di VMware (Virtual Network Editor, pilih VMnet Host-Only, centang "Use local DHCP service"). Jika VMnet ini dipakai bersama Host-Only switch (`192.168.100.1`), rentang DHCP-nya tidak boleh mencakup alamat yang sudah dipakai (switch dan PC host).
 
 Simpan file (`Ctrl+O`, `Enter`, `Ctrl+X`), lalu terapkan:
 
@@ -57,7 +74,8 @@ sudo netplan apply
 Verifikasi IP dan koneksi internet **sebelum lanjut ke tahap berikutnya**:
 
 ```bash
-ip a                     # pastikan 192.168.30.10/24 aktif di interface
+ip a                     # pastikan 192.168.30.10/24 aktif, dan NIC 2 (ens34) mendapat IP dari DHCP
+ip -4 a show ens34       # CATAT IP NIC 2 ini untuk PuTTY
 ping -c 4 192.168.30.1   # tes gateway (Router MikroTik)
 ping -c 4 8.8.8.8        # tes internet
 ```
@@ -66,11 +84,40 @@ ping -c 4 8.8.8.8        # tes internet
 
 ---
 
+## 1b. Akses Server lewat PuTTY (dari PC Host)
+
+1. Pasang SSH server (masih di konsol VMware, perintahnya pendek):
+
+   ```bash
+   sudo apt update
+   sudo apt install -y openssh-server
+   sudo systemctl enable --now ssh
+   ```
+
+2. Di **PC host**, pastikan adapter Host-Only memakai IP satu subnet dengan NIC 2 (mis. 192.168.100.2/24)” menjadi “pastikan adapter Host-Only PC host satu jaringan dengan NIC 2, lalu tes ping ke IP NIC 2 yang tadi dicatat dari Command Prompt:
+
+   ```
+   ping <IP-NIC-2>
+   ```
+
+3. Buka **PuTTY**: **Host Name** `<IP-NIC-2>`, **Port** `22`, **Connection type** SSH, klik **Open**, terima host key, lalu login dengan username dan password Ubuntu.
+
+4. Mulai sekarang **semua perintah dan isi file dikerjakan dari PuTTY**. Untuk paste, cukup **klik kanan** di jendela PuTTY.
+
+---
+
 ## 2. Update Sistem
 
 ```bash
 sudo apt update -y
 sudo apt upgrade -y
+```
+
+Atur zona waktu agar log berwaktu benar:
+
+```bash
+sudo timedatectl set-timezone Asia/Jakarta
+timedatectl                # pastikan Time zone: Asia/Jakarta
 ```
 
 ---
@@ -207,270 +254,149 @@ sudo mkdir -p /var/www/lab-smk.xyz
 sudo mkdir -p /etc/nginx/ssl
 ```
 
-### 4.3 Buat `index.html`
+### 4.3 Buat `index.html` (satu file, CSS dan JS di dalamnya)
+
+Landing page cukup **satu file**, jadi mudah diganti. Lewat PuTTY:
 
 ```bash
 sudo nano /var/www/lab-smk.xyz/index.html
 ```
 
-Isi:
+Paste isi berikut (klik kanan di PuTTY):
 
 ```html
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPK Paket 1 - Lab SMK</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab SMK - Landing Page</title>
+<style>
+  /* ===== GANTI WARNA TEMA DI SINI ===== */
+  :root { --utama: #2563eb; --gelap: #0f172a; --terang: #f1f5f9; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; background: var(--terang); color: #1e293b; line-height: 1.6; }
+  .hero { background: linear-gradient(135deg, var(--gelap), var(--utama)); color: #fff; text-align: center; padding: 80px 20px 90px; }
+  .hero .label { display: inline-block; background: rgba(255,255,255,.15); padding: 4px 14px; border-radius: 20px; font-size: .85rem; margin-bottom: 16px; }
+  .hero h1 { font-size: 2.4rem; margin-bottom: 8px; }
+  .hero p { color: #cbd5e1; }
+  .badge { display: inline-block; margin-top: 22px; background: #22c55e; color: #052e16; font-weight: 600; padding: 8px 18px; border-radius: 8px; font-size: .9rem; }
+  .badge.http { background: #f59e0b; color: #451a03; }
+  main { max-width: 960px; margin: -40px auto 40px; padding: 0 20px; }
+  .box { background: #fff; border-radius: 14px; padding: 26px; margin-bottom: 20px; box-shadow: 0 6px 18px rgba(15,23,42,.08); }
+  h2 { color: var(--gelap); margin-bottom: 12px; font-size: 1.25rem; }
+  .cards { display: flex; gap: 16px; flex-wrap: wrap; }
+  .card { flex: 1 1 200px; border-top: 4px solid var(--utama); background: var(--terang); border-radius: 10px; padding: 18px; }
+  .card h3 { font-size: 1rem; color: var(--utama); margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 9px 4px; border-bottom: 1px solid #e2e8f0; }
+  td:first-child { color: #64748b; width: 40%; }
+  .btn { display: inline-block; margin-top: 10px; background: var(--utama); color: #fff; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; }
+  .btn:hover { opacity: .9; }
+  footer { text-align: center; padding: 24px; color: #64748b; font-size: .9rem; }
+</style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="logo">Lab-SMK.xyz</div>
-        <ul class="nav-links">
-            <li><a href="#home">Home</a></li>
-            <li><a href="#tentang">Tentang</a></li>
-            <li><a href="#layanan">Layanan</a></li>
-            <li><a href="#kontak">Kontak</a></li>
-        </ul>
-    </nav>
 
-    <header id="home" class="hero">
-        <h1>Selamat Datang di Server SPK Paket 1</h1>
-        <p>Landing page ini disajikan oleh Nginx pada Ubuntu Server 24.04</p>
-        <button id="btnCek" class="btn">Cek Status Server</button>
-        <p id="statusOutput"></p>
-    </header>
+<!-- ============================================================
+     WAJIB GANTI: isi data diri kamu di bagian ini saja.
+     Bagian lain boleh diubah sesuka hati (teks, warna, urutan).
+     ============================================================ -->
+<script>
+  var DATA = {
+    nama:       "NAMA SISWA",
+    kelas:      "XII TKJ",
+    noUjian:    "00-TKJ-000",
+    sekolah:    "SMK XYZ",
+    tagline:    "Server DNS, Web, dan Monitoring Real-Time",
+    dns:        "BIND9",
+    web:        "Nginx",
+    monitoring: "Netdata"
+  };
+</script>
 
-    <section id="tentang" class="section">
-        <h2>Tentang Topologi</h2>
-        <p>Server ini merupakan bagian dari topologi UKK TKJ SPK Paket 1, dengan
-        layanan DNS, Web Server, dan Monitoring yang berjalan pada satu VM Ubuntu/Debian
-        di VLAN 30 (192.168.30.10/24).</p>
-    </section>
+<header class="hero">
+  <span class="label"><span data-isi="sekolah"></span> | UKK TKJ 2026</span>
+  <h1><span data-isi="nama"></span></h1>
+  <p><span data-isi="kelas"></span> &middot; No. Ujian <span data-isi="noUjian"></span></p>
+  <p data-isi="tagline"></p>
+  <div id="badge" class="badge">Memeriksa koneksi...</div>
+</header>
 
-    <section id="layanan" class="section alt">
-        <h2>Layanan Server</h2>
-        <div class="cards">
-            <div class="card">
-                <h3>DNS Server</h3>
-                <p>BIND9 - domain lab-smk.xyz</p>
-            </div>
-            <div class="card">
-                <h3>Web Server</h3>
-                <p>Nginx + HTTPS Self-Signed</p>
-            </div>
-            <div class="card">
-                <h3>Monitoring</h3>
-                <p>Netdata - monitor.lab-smk.xyz</p>
-            </div>
-        </div>
-    </section>
+<main>
+  <section class="box">
+    <h2>Layanan Server</h2>
+    <div class="cards">
+      <div class="card"><h3>DNS Server</h3><span data-isi="dns"></span> &middot; zona lab-smk.xyz</div>
+      <div class="card"><h3>Web Server</h3><span data-isi="web"></span> &middot; HTTPS self-signed</div>
+      <div class="card"><h3>Monitoring</h3><span data-isi="monitoring"></span> &middot; Router dan Server</div>
+    </div>
+  </section>
 
-    <section id="kontak" class="section">
-        <h2>Kontak</h2>
-        <p>Admin Lab SMK &mdash; admin@lab-smk.xyz</p>
-    </section>
+  <section class="box">
+    <h2>Informasi Jaringan</h2>
+    <table>
+      <tr><td>Domain</td><td>lab-smk.xyz</td></tr>
+      <tr><td>Alamat IP Server</td><td>192.168.30.10 (VLAN 30)</td></tr>
+      <tr><td>Alamat halaman ini</td><td id="alamat">-</td></tr>
+      <tr><td>Waktu akses</td><td id="waktu">-</td></tr>
+    </table>
+    <a class="btn" href="https://monitor.lab-smk.xyz">Buka Dashboard Monitoring</a>
+  </section>
+</main>
 
-    <footer>
-        <p>&copy; 2026 UKK TKJ - SPK Paket 1</p>
-    </footer>
+<footer>&copy; 2026 <span data-isi="nama"></span> &middot; <span data-isi="sekolah"></span></footer>
 
-    <script src="script.js"></script>
+<script>
+  // Mengisi semua teks dari DATA di atas
+  document.querySelectorAll("[data-isi]").forEach(function (el) {
+    el.textContent = DATA[el.getAttribute("data-isi")] || "";
+  });
+  document.title = DATA.nama + " - " + DATA.sekolah;
+
+  // Status HTTPS, alamat, dan waktu
+  var aman = location.protocol === "https:";
+  var badge = document.getElementById("badge");
+  badge.textContent = aman ? "Dibuka lewat HTTPS (terenkripsi)" : "Dibuka lewat HTTP (tidak terenkripsi)";
+  if (!aman) badge.className = "badge http";
+  document.getElementById("alamat").textContent = location.href;
+  document.getElementById("waktu").textContent = new Date().toLocaleString("id-ID");
+</script>
 </body>
 </html>
 ```
 
-Simpan.
+Simpan (`Ctrl+O`, `Enter`, `Ctrl+X`).
 
-### 4.4 Buat `style.css`
+**WAJIB: ganti identitas agar halaman autentik milik kamu sendiri.** Buka kembali file ini (`sudo nano ...`) dan ubah blok `var DATA` di bagian atas:
 
-```bash
-sudo nano /var/www/lab-smk.xyz/style.css
-```
+| Isian | Contoh |
+|---|---|
+| `nama` | nama lengkapmu |
+| `kelas` | `XII TKJ 1` |
+| `noUjian` | nomor ujianmu |
+| `sekolah` | nama sekolahmu |
+| `dns`, `web`, `monitoring` | aplikasi yang kamu pakai (mis. `Apache2`, `Cacti`) |
 
-Isi:
+Warna tema bisa diubah lewat `--utama` di bagian `:root`. Karena file statis, tidak perlu restart nginx; cukup muat ulang browser (`Ctrl+F5`).
 
-```css
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', Arial, sans-serif;
-}
+> Alternatif jika paste terpotong: kirim file dari PC host dengan `pscp` (ikut terpasang bersama PuTTY), misalnya `pscp index.html NAMA_USER@192.168.100.10:/home/NAMA_USER/`, lalu di PuTTY jalankan `sudo cp ~/index.html /var/www/lab-smk.xyz/index.html`.
 
-body {
-    background-color: #f4f6f8;
-    color: #222;
-    scroll-behavior: smooth;
-}
-
-.navbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: #0f172a;
-    padding: 16px 40px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.navbar .logo {
-    color: #38bdf8;
-    font-weight: bold;
-    font-size: 1.3rem;
-}
-
-.nav-links {
-    list-style: none;
-    display: flex;
-    gap: 24px;
-}
-
-.nav-links a {
-    color: #e2e8f0;
-    text-decoration: none;
-    font-weight: 500;
-    transition: color 0.2s;
-}
-
-.nav-links a:hover {
-    color: #38bdf8;
-}
-
-.hero {
-    background: linear-gradient(135deg, #0f172a, #1e3a8a);
-    color: white;
-    text-align: center;
-    padding: 100px 20px;
-}
-
-.hero h1 {
-    font-size: 2.4rem;
-    margin-bottom: 12px;
-}
-
-.hero p {
-    margin-bottom: 24px;
-    color: #cbd5e1;
-}
-
-.btn {
-    background-color: #38bdf8;
-    color: #0f172a;
-    border: none;
-    padding: 12px 28px;
-    border-radius: 6px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: transform 0.2s, background-color 0.2s;
-}
-
-.btn:hover {
-    background-color: #0ea5e9;
-    transform: translateY(-2px);
-}
-
-#statusOutput {
-    margin-top: 16px;
-    font-weight: bold;
-    color: #4ade80;
-}
-
-.section {
-    padding: 60px 40px;
-    max-width: 900px;
-    margin: 0 auto;
-}
-
-.section.alt {
-    background-color: #eef2f6;
-    max-width: 100%;
-}
-
-.section h2 {
-    margin-bottom: 16px;
-    color: #0f172a;
-}
-
-.cards {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-    margin-top: 20px;
-}
-
-.card {
-    background: white;
-    border-radius: 10px;
-    padding: 24px;
-    width: 220px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-    text-align: center;
-    transition: transform 0.2s;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-}
-
-footer {
-    text-align: center;
-    padding: 20px;
-    background-color: #0f172a;
-    color: #94a3b8;
-}
-```
-
-Simpan.
-
-### 4.5 Buat `script.js`
-
-```bash
-sudo nano /var/www/lab-smk.xyz/script.js
-```
-
-Isi:
-
-```javascript
-document.addEventListener('DOMContentLoaded', function () {
-    const btn = document.getElementById('btnCek');
-    const output = document.getElementById('statusOutput');
-
-    btn.addEventListener('click', function () {
-        const now = new Date();
-        output.textContent = 'Server aktif - waktu cek: ' + now.toLocaleString('id-ID');
-    });
-
-    // Efek scroll aktif pada navbar
-    const navbar = document.querySelector('.navbar');
-    window.addEventListener('scroll', function () {
-        if (window.scrollY > 50) {
-            navbar.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
-        } else {
-            navbar.style.boxShadow = 'none';
-        }
-    });
-});
-```
-
-Simpan.
-
-### 4.6 Set Kepemilikan File
+### 4.4 Set Kepemilikan File
 
 ```bash
 sudo chown -R www-data:www-data /var/www/lab-smk.xyz
+sudo chmod 644 /var/www/lab-smk.xyz/index.html
 ```
 
-### 4.7 Buat Sertifikat SSL Self-Signed
+### 4.5 Buat Sertifikat SSL Self-Signed
 
 ```bash
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/lab-smk.xyz.key -out /etc/nginx/ssl/lab-smk.xyz.crt -subj "/C=ID/ST=JawaTengah/L=Purwokerto/O=SMK/OU=TKJ/CN=lab-smk.xyz"
 ```
 
-### 4.8 Buat Virtual Host Nginx (HTTP → HTTPS)
+### 4.6 Buat Virtual Host Nginx (HTTP → HTTPS)
 
 ```bash
 sudo nano /etc/nginx/sites-available/lab-smk.xyz
@@ -503,14 +429,14 @@ server {
 
 Simpan.
 
-### 4.9 Aktifkan Virtual Host & Hapus Default
+### 4.7 Aktifkan Virtual Host & Hapus Default
 
 ```bash
 sudo ln -sf /etc/nginx/sites-available/lab-smk.xyz /etc/nginx/sites-enabled/lab-smk.xyz
 sudo rm -f /etc/nginx/sites-enabled/default
 ```
 
-### 4.10 Cek Konfigurasi & Restart Nginx
+### 4.8 Cek Konfigurasi & Restart Nginx
 
 ```bash
 sudo nginx -t
@@ -518,7 +444,7 @@ sudo systemctl enable nginx
 sudo systemctl restart nginx
 ```
 
-### 4.11 Tes Web Server
+### 4.9 Tes Web Server
 
 ```bash
 curl -k https://lab-smk.xyz
@@ -697,7 +623,7 @@ Atau buka browser: `https://monitor.lab-smk.xyz` — pastikan muncul dashboard N
 
 ```bash
 sudo apt install -y ufw
-sudo ufw allow 22/tcp      # SSH
+sudo ufw allow 22/tcp      # SSH (PuTTY dari PC host lewat NIC Host-Only)
 sudo ufw allow 53          # DNS
 sudo ufw allow 80/tcp      # HTTP
 sudo ufw allow 443/tcp     # HTTPS
@@ -726,6 +652,7 @@ sudo ufw status                   # Firewall
 dig @192.168.30.10 lab-smk.xyz
 dig @192.168.30.10 monitor.lab-smk.xyz
 curl -k https://lab-smk.xyz
+curl -sk https://lab-smk.xyz | grep -c "NAMA SISWA"   # harus 0 (identitas sudah diganti)
 curl -k https://monitor.lab-smk.xyz
 snmpwalk -v2c -c public 192.168.30.1 system
 ```
@@ -733,9 +660,10 @@ snmpwalk -v2c -c public 192.168.30.1 system
 **Checklist hasil akhir:**
 
 - [ ] IP Static `192.168.30.10/24` aktif & bisa akses internet
+- [ ] NIC 2 Host-Only mendapat IP dinamis (DHCP), dan server bisa diakses lewat PuTTY dari PC host
 - [ ] `dig lab-smk.xyz` mengembalikan `192.168.30.10`
 - [ ] `dig` dari VLAN 20 untuk domain luar (recursive) **ditolak** (status: REFUSED), sedangkan dari VLAN 10 dan VLAN 30 **berhasil**
-- [ ] `https://lab-smk.xyz` menampilkan landing page (index.html, style.css, script.js)
+- [ ] `https://lab-smk.xyz` menampilkan landing page (satu file `index.html`) dengan **identitas sendiri** (tidak lagi memuat `NAMA SISWA`)
 - [ ] `https://monitor.lab-smk.xyz` menampilkan dashboard Netdata (HTTPS, bukan HTTP)
 - [ ] Dashboard monitoring menampilkan 2 host: **server** dan **router** (CPU/Memory)
 - [ ] Port 19999 tidak bisa diakses langsung dari luar (`ufw deny`)
