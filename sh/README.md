@@ -12,7 +12,7 @@ sudo nano /etc/netplan/50-cloud-init.yaml
 network:
   version: 2
   ethernets:
-    ens33:                      # ganti sesuai nama interface asli
+    ens33:                      # NIC 1 (VLAN 30) - ganti sesuai nama hasil 'ip a'
       dhcp4: no
       addresses:
         - 192.168.30.10/24
@@ -20,7 +20,12 @@ network:
         - to: default
           via: 192.168.30.1     # gateway VLAN 30 dari router MikroTik
       nameservers:
-        addresses: [8.8.8.8, 1.1.1.1]   # sementara pakai DNS publik dulu
+        addresses: [8.8.8.8, 1.1.1.1]   # sementara DNS publik dulu
+    ens34:                      # NIC 2 (Host-Only) - ganti sesuai nama hasil 'ip a'
+      dhcp4: yes
+      dhcp4-overrides:
+        use-routes: false       # jangan ambil default route dari DHCP Host-Only
+        use-dns: false          # jangan ambil DNS dari DHCP Host-Only
 ```
 
 4. Simpan ( tekan Ctrl+X, tekan Y, tekan Enter), lalu terapkan:
