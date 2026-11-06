@@ -45,11 +45,13 @@ echo " Memulai konfigurasi server ${DOMAIN} (${IP_ADDRESS})"
 echo "======================================================"
 
 # --------- Cek dulu apakah IP server sudah sesuai & internet nyambung ----------
-ALL_IPS=$(hostname -I)
+ALL_IPS=$(hostname -I 2>/dev/null || ip addr | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+
 if ! echo " ${ALL_IPS} " | grep -q " ${IP_ADDRESS} "; then
     echo ">> PERINGATAN: IP ${IP_ADDRESS} tidak ditemukan. IP server saat ini: ${ALL_IPS}"
     echo "   Pastikan IP static sudah dikonfigurasi manual sebelum lanjut."
-    read -p "   Lanjutkan tetap? (y/n): " confirm
+    printf "   Lanjutkan tetap? (y/n): "
+    read confirm
     [ "$confirm" != "y" ] && exit 1
 fi
 
@@ -58,7 +60,9 @@ if ! ping -c 2 8.8.8.8 >/dev/null 2>&1; then
     echo "   Selesaikan konfigurasi IP static & gateway secara manual dulu."
     exit 1
 fi
+
 echo "   OK - IP: ${ALL_IPS}, internet: terkoneksi."
+
 if [ -z "${MGMT_IP}" ]; then
     echo "   Catatan: NIC Host-Only belum mendapat IP (cek DHCP Host-Only di VMware), PuTTY dari PC host belum bisa dipakai."
 else
