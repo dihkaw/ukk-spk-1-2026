@@ -77,8 +77,8 @@ apt update -y
 timedatectl set-timezone Asia/Jakarta
 
 # SSH server (untuk PuTTY dari PC host lewat NIC Host-Only)
-apt install -y openssh-server
-systemctl enable --now ssh
+# apt install -y openssh-server
+# systemctl enable --now ssh
 
 # ================= 2. INSTALL & KONFIGURASI BIND9 (DNS SERVER) =================
 echo ">> [2/5] Install & konfigurasi BIND9 (DNS Server)..."
