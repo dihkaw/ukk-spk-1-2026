@@ -86,7 +86,7 @@ ping -c 4 8.8.8.8        # tes internet
 
 ## 1b. Akses Server lewat PuTTY (dari PC Host)
 
-1. Pasang SSH server (masih di konsol VMware, perintahnya pendek):
+1. Pasang SSH server (masih di konsol VMware, perintahnya pendek) OPSIONAL yaaa:
 
    ```bash
    sudo apt update
@@ -110,7 +110,6 @@ ping -c 4 8.8.8.8        # tes internet
 
 ```bash
 sudo apt update -y
-sudo apt upgrade -y
 ```
 
 Atur zona waktu agar log berwaktu benar:
