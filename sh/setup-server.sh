@@ -71,7 +71,7 @@ fi
 
 # ================= 1. UPDATE SISTEM =================
 echo ">> [1/5] Update sistem, zona waktu, dan SSH server..."
-apt update -y && apt upgrade -y
+apt update -y
 
 # Zona waktu WIB agar log berwaktu benar
 timedatectl set-timezone Asia/Jakarta
