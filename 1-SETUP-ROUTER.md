@@ -481,4 +481,4 @@ Lalu di router, buka **IP → Firewall → Address Lists** (atau `/ip firewall a
 
 ---
 
-**Selanjutnya:** lanjut ke [`2-setup-switch.md`](./2-setup-switch.md) untuk konfigurasi VM Switch MikroTik (CHR).
+**Selanjutnya:** lanjut ke [`2-SETUP-SWITCH.md`](./2-SETUP-SWITCH.md) untuk konfigurasi VM Switch MikroTik (CHR).
