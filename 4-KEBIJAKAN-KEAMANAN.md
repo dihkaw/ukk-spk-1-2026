@@ -128,7 +128,7 @@ sudo tar czf backup-server-$(date +%F).tar.gz /etc/bind /etc/nginx /etc/netdata 
 1. Firewall router mencatat percobaan akses SSH/Winbox (`LOGIN-ATTEMPT`) dan pelanggaran VLAN 20 (`BLOCKED-VLAN20`). Log dilihat lewat menu **Log** di Winbox.
 2. Monitoring server dan router dilakukan real-time lewat dashboard `https://monitor.lab-smk.xyz`.
 3. Administrator memeriksa log dan dashboard minimal **sekali seminggu**.
-4. Setiap kejadian mencurigakan ditangani sesuai dokumen [`SOP-INSIDEN.md`](./SOP-INSIDEN.md).
+4. Setiap kejadian mencurigakan ditangani sesuai dokumen [`SOP-INSIDEN.md`](./5-SOP-INSIDEN.md).
 
 ---
 
