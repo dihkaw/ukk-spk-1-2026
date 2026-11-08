@@ -310,4 +310,4 @@ Uji dari sisi client:
 
 ---
 
-**Referensi sebelumnya:** [`1-setup-router.md`](./1-setup-router.md)
+**Referensi sebelumnya:** [`1-SETUP-ROUTER.md`](./1-SETUP-ROUTER.md)
