@@ -1,7 +1,7 @@
 # SOP Penanganan Insiden
 ## Laboratorium Jaringan SMK XYZ — UKK TKJ 2026, SPK Paket 1
 
-SOP ini mengatur langkah penanganan insiden pada router, server, dan jaringan VLAN. Dokumen ini melengkapi [`KEBIJAKAN-KEAMANAN.md`](./KEBIJAKAN-KEAMANAN.md).
+SOP ini mengatur langkah penanganan insiden pada router, server, dan jaringan VLAN. Dokumen ini melengkapi [`KEBIJAKAN-KEAMANAN.md`](./4-KEBIJAKAN-KEAMANAN.md).
 
 ---
 
