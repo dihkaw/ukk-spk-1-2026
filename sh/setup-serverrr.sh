@@ -396,6 +396,40 @@ else
     echo ">> [WARNING] Netdata gagal diunduh karena gangguan jaringan. Script TETAP Dilanjutkan ke tahap berikutnya..."
 fi
 
+# --- Reverse proxy nginx untuk monitor.${DOMAIN} (HTTPS) ---
+echo ">> Konfigurasi reverse proxy HTTPS untuk monitor.${DOMAIN}..."
+cat > /etc/nginx/sites-available/monitor.${DOMAIN} <<EOF
+server {
+    listen 80;
+    server_name monitor.${DOMAIN};
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name monitor.${DOMAIN};
+
+    ssl_certificate     /etc/nginx/ssl/${DOMAIN}.crt;
+    ssl_certificate_key /etc/nginx/ssl/${DOMAIN}.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:19999;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "keep-alive";
+    }
+}
+EOF
+
+ln -sf /etc/nginx/sites-available/monitor.${DOMAIN} /etc/nginx/sites-enabled/monitor.${DOMAIN}
+nginx -t
+systemctl restart nginx
+echo "   Monitoring aktif via HTTPS: https://monitor.${DOMAIN}"
+
 # ================= 6. FIREWALL DASAR SERVER (UFW) =================
 echo ">> [5/5] Konfigurasi firewall dasar (UFW) pada server..."
 apt install -y ufw
