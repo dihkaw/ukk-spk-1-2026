@@ -80,25 +80,11 @@ Minimal 12 karakter dengan huruf besar, huruf kecil, angka, dan simbol. Diganti 
 | Siswa (VLAN 20) | Web sekolah dan DNS di server | VLAN 10, manajemen router, internet | Firewall antar-VLAN, tanpa hak admin |
 | Server (VLAN 30) | VLAN 10 (pemeliharaan), internet untuk pembaruan | Dijangkau Siswa selain DNS dan web | UFW atau firewall host, HTTPS, backup rutin |
 
-### L3.3 Matriks komunikasi antar-VLAN
-
-| Sumber | Tujuan | Layanan | Izin / blokir |
-|---|---|---|---|
-| VLAN 10 | VLAN 30 | DNS, web, monitoring | Izin |
-| VLAN 10 | VLAN 20 | Koneksi dari Guru (balasan diizinkan) | Izin |
-| VLAN 20 | VLAN 10 | Semua | **Blokir** (dicatat log) |
-| VLAN 20 | VLAN 30 | DNS, web | Izin |
-| VLAN 20 | Internet | Semua | **Blokir** |
-| VLAN 30 | VLAN 10 | Semua | Izin |
-| VLAN 10 | Internet | Semua | Izin (NAT) |
-| VLAN 10 / 30 | Router | SSH 22, Winbox 8291 | Izin |
-| VLAN 20 | Router | SSH, Winbox, MAC-Winbox | **Blokir** |
-
-### L3.4 Kebijakan penggunaan internet
+### L3.3 Kebijakan penggunaan internet
 
 Internet dipakai untuk belajar dan administrasi. Dilarang mengakses judi, pornografi, dan perangkat lunak bajakan, serta memindai atau menyerang jaringan. Siswa memakai layanan server sekolah, sedangkan akses internet bebas hanya untuk Guru/Admin (diatur firewall). Aktivitas dicatat di log, dan pengguna bertanggung jawab atas akunnya. Pelanggaran dikenai teguran, pembatasan akses, lalu laporan ke pimpinan.
 
-### L3.5 Backup, arsip, dan sanitasi
+### L3.4 Backup, arsip, dan sanitasi
 
 | Objek | Isi | Frekuensi | File |
 |---|---|---|---|
