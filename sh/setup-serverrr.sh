@@ -332,7 +332,7 @@ EOF
     systemctl restart netdata || true
     echo "   Netdata aktif secara internal di 127.0.0.1:19999"
 
-    # 5. Konfigurasi monitoring ROUTER via SNMP
+    # 5. Konfigurasi monitoring ROUTER via SNMP & Virtual Node
     echo ">> Konfigurasi monitoring Router MikroTik (${ROUTER_IP}) via SNMP..."
     apt install -y snmp || true
 
@@ -344,16 +344,20 @@ modules:
   snmp: yes
 EOF
 
-    # Konfigurasi job SNMP (snmp.conf)
+    # Konfigurasi job SNMP + Virtual Node (snmp.conf)
     cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
 jobs:
   - name: router
     update_every: 10
     hostname: '${ROUTER_IP}'
     community: '${SNMP_COMMUNITY}'
+    vnode:
+      hostname: 'Router-MikroTik'
+      guid: '11111111-2222-3333-4444-555555555555'
     options:
       port: 161
-      retries: 1
+      version: 2
+      timeout: 2
     charts:
       - id: 'cpu_load'
         title: 'Router CPU Load'
@@ -364,20 +368,20 @@ jobs:
           - oid: 1.3.6.1.2.1.25.3.3.1.2.1
             name: cpu
             algorithm: absolute
-      - id: 'memory_usage'
-        title: 'Router Memory Used'
-        units: 'bytes'
-        family: 'memory'
-        type: area
+      - id: 'system_uptime'
+        title: 'Router Uptime'
+        units: 'ticks'
+        family: 'system'
+        type: line
         dimensions:
-          - oid: 1.3.6.1.2.1.25.2.3.1.6.65536
-            name: memory_used
+          - oid: 1.3.6.1.2.1.1.3.0
+            name: uptime
             algorithm: absolute
 EOF
 
     chown -R netdata:netdata "${CONF_DIR}" 2>/dev/null || true
     systemctl restart netdata || true
-    echo "   Host 'router' (${ROUTER_IP}) berhasil dikonfigurasi via SNMP."
+    echo "   Host 'router' (${ROUTER_IP}) berhasil dikonfigurasi via SNMP sebagai Virtual Node."
     return 0
 }
 
