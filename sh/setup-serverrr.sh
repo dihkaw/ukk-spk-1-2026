@@ -294,63 +294,66 @@ echo "   Web server aktif: https://${DOMAIN} (self-signed)"
 # ================= 5. INSTALL & KONFIGURASI NETDATA (MONITORING) =================
 echo ">> [4/5] Install Netdata (Monitoring Server)..."
 
-# 1. Hapus instalasi versi lama / terputus jika ada
-if dpkg -l | grep -q netdata || [ -d "/etc/netdata" ]; then
-    echo "   Membersihkan versi Netdata lama..."
-    apt remove --purge -y netdata netdata-* >/dev/null 2>&1
-    rm -rf /etc/netdata /var/lib/netdata /var/cache/netdata /usr/share/netdata /var/log/netdata /tmp/kickstart*
-fi
+# Buat fungsi terisolasi agar kegagalan Netdata TIDAK menghentikan script utama
+install_netdata_service() {
+    # 1. Hapus versi lama/rusak jika ada
+    if dpkg -l | grep -q netdata || [ -d "/etc/netdata" ]; then
+        echo "   Membersihkan versi Netdata lama..."
+        apt remove --purge -y netdata netdata-* >/dev/null 2>&1 || true
+        rm -rf /etc/netdata /var/lib/netdata /var/cache/netdata /usr/share/netdata /var/log/netdata /tmp/kickstart*
+    fi
 
-# 2. Tambah Repository Resmi Netdata (PackageCloud) & Install via APT
-echo "   Menambahkan repository resmi Netdata (PackageCloud)..."
-curl -s https://packagecloud.io/install/repositories/netdata/netdata/script.deb.sh | bash
+    # 2. Tambah Repository Resmi Netdata (PackageCloud)
+    echo "   Menambahkan repository resmi Netdata (PackageCloud)..."
+    curl -s https://packagecloud.io/install/repositories/netdata/netdata/script.deb.sh | bash || return 1
 
-echo "   Menginstal Netdata versi resmi..."
-apt update -y
-apt install -y netdata
+    # 3. Install Netdata via APT dengan Auto-Retry 10x dan Timeout 120 detik
+    echo "   Menginstal Netdata via APT (dengan toleransi koneksi lambat)..."
+    apt update -o Acquire::Retries=5 -o Acquire::http::Timeout=60 || true
+    apt install -y -o Acquire::Retries=10 -o Acquire::http::Timeout=120 --fix-missing netdata || return 1
 
-# 3. Deteksi direktori konfigurasi Netdata
-CONF_DIR="/etc/netdata"
+    # 4. Deteksi direktori konfigurasi Netdata
+    CONF_DIR="/etc/netdata"
 
-# 4. Batasi akses Netdata ke Localhost (127.0.0.1)
-if [ -f "${CONF_DIR}/netdata.conf" ]; then
-    if grep -q "\[web\]" "${CONF_DIR}/netdata.conf"; then
-        sed -i '/\[web\]/a \    bind to = 127.0.0.1' "${CONF_DIR}/netdata.conf" 2>/dev/null || true
-    else
-        cat >> "${CONF_DIR}/netdata.conf" <<EOF
+    # 5. Batasi akses Netdata ke Localhost (127.0.0.1)
+    if [ -f "${CONF_DIR}/netdata.conf" ]; then
+        if grep -q "\[web\]" "${CONF_DIR}/netdata.conf"; then
+            sed -i '/\[web\]/a \    bind to = 127.0.0.1' "${CONF_DIR}/netdata.conf" 2>/dev/null || true
+        else
+            cat >> "${CONF_DIR}/netdata.conf" <<EOF
 
 [web]
     bind to = 127.0.0.1
 EOF
+        fi
     fi
-fi
 
-systemctl enable netdata
-systemctl restart netdata
-echo "   Netdata aktif secara internal di 127.0.0.1:19999 (tidak diekspos langsung)"
+    systemctl enable netdata || true
+    systemctl restart netdata || true
+    echo "   Netdata aktif secara internal di 127.0.0.1:19999"
 
-# --- 5. Tambah host monitoring: ROUTER (via SNMP) ---
-echo ">> Konfigurasi monitoring Router MikroTik (${ROUTER_IP}) via SNMP..."
-apt install -y snmp
+    # 6. Konfigurasi monitoring ROUTER via SNMP
+    echo ">> Konfigurasi monitoring Router MikroTik (${ROUTER_IP}) via SNMP..."
+    apt install -y snmp || true
 
-mkdir -p "${CONF_DIR}/go.d"
+    mkdir -p "${CONF_DIR}/go.d"
 
-# Aktifkan plugin SNMP pada go.d.conf
-if [ -f "${CONF_DIR}/go.d.conf" ]; then
-    if grep -q "^\s*snmp:" "${CONF_DIR}/go.d.conf"; then
-        sed -i "s/^\s*snmp:.*/  snmp: yes/" "${CONF_DIR}/go.d.conf"
+    # Aktifkan plugin SNMP pada go.d.conf
+    if [ -f "${CONF_DIR}/go.d.conf" ]; then
+        if grep -q "^\s*snmp:" "${CONF_DIR}/go.d.conf"; then
+            sed -i "s/^\s*snmp:.*/  snmp: yes/" "${CONF_DIR}/go.d.conf"
+        else
+            echo "  snmp: yes" >> "${CONF_DIR}/go.d.conf"
+        fi
     else
-        echo "  snmp: yes" >> "${CONF_DIR}/go.d.conf"
-    fi
-else
-    cat > "${CONF_DIR}/go.d.conf" <<EOF
+        cat > "${CONF_DIR}/go.d.conf" <<EOF
 modules:
   snmp: yes
 EOF
-fi
+    fi
 
-# Konfigurasi job SNMP dengan format YAML Netdata (go.d) yang benar & valid
-cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
+    # Konfigurasi job SNMP (snmp.conf)
+    cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
 jobs:
   - name: router
     update_every: 10
@@ -380,11 +383,18 @@ jobs:
             algorithm: absolute
 EOF
 
-# Set hak akses direktori konfigurasi agar terbaca oleh user netdata
-chown -R netdata:netdata "${CONF_DIR}/go.d" 2>/dev/null || true
+    chown -R netdata:netdata "${CONF_DIR}/go.d" 2>/dev/null || true
+    systemctl restart netdata || true
+    echo "   Host 'router' (${ROUTER_IP}) berhasil dikonfigurasi via SNMP."
+    return 0
+}
 
-systemctl restart netdata
-echo "   Host 'router' (${ROUTER_IP}) berhasil dikonfigurasi via SNMP."
+# Jalankan fungsi instalasi Netdata secara toleran error
+if install_netdata_service; then
+    echo ">> [OK] Netdata Berhasil Terinstal & Dikonfigurasi."
+else
+    echo ">> [WARNING] Netdata gagal diunduh karena gangguan jaringan. Script TETAP Dilanjutkan ke tahap berikutnya..."
+fi
 
 # ================= 6. FIREWALL DASAR SERVER (UFW) =================
 echo ">> [5/5] Konfigurasi firewall dasar (UFW) pada server..."
