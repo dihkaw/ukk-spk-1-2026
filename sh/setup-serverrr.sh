@@ -294,7 +294,11 @@ echo "   Web server aktif: https://${DOMAIN} (self-signed)"
 # ================= 5. INSTALL & KONFIGURASI NETDATA (MONITORING) =================
 echo ">> [4/5] Install Netdata (Monitoring Server)..."
 
-# Buat fungsi terisolasi agar kegagalan Netdata TIDAK menghentikan script utama
+# Fallback nilai domain jika variabel DOMAIN belum terisi
+DOMAIN="${DOMAIN:-lab-smk.xyz}"
+ROUTER_IP="${ROUTER_IP:-192.168.30.1}"
+SNMP_COMMUNITY="${SNMP_COMMUNITY:-public}"
+
 install_netdata_service() {
     # 1. Hapus versi lama/rusak jika ada
     if dpkg -l | grep -q netdata || [ -d "/etc/netdata" ]; then
@@ -307,50 +311,38 @@ install_netdata_service() {
     echo "   Menambahkan repository resmi Netdata (PackageCloud)..."
     curl -s https://packagecloud.io/install/repositories/netdata/netdata/script.deb.sh | bash || return 1
 
-    # 3. Install Netdata via APT dengan Auto-Retry 10x dan Timeout 120 detik
-    echo "   Menginstal Netdata via APT (dengan toleransi koneksi lambat)..."
+    # 3. Install Netdata via APT dengan Auto-Retry
+    echo "   Menginstal Netdata via APT..."
     apt update -o Acquire::Retries=5 -o Acquire::http::Timeout=60 || true
     apt install -y -o Acquire::Retries=10 -o Acquire::http::Timeout=120 --fix-missing netdata || return 1
 
-    # 4. Deteksi direktori konfigurasi Netdata
     CONF_DIR="/etc/netdata"
+    mkdir -p "${CONF_DIR}"
 
-    # 5. Batasi akses Netdata ke Localhost (127.0.0.1)
-    if [ -f "${CONF_DIR}/netdata.conf" ]; then
-        if grep -q "\[web\]" "${CONF_DIR}/netdata.conf"; then
-            sed -i '/\[web\]/a \    bind to = 127.0.0.1' "${CONF_DIR}/netdata.conf" 2>/dev/null || true
-        else
-            cat >> "${CONF_DIR}/netdata.conf" <<EOF
+    # 4. Buat konfigurasi netdata.conf yang bersih (bind ke 127.0.0.1)
+    cat > "${CONF_DIR}/netdata.conf" <<EOF
+[global]
+    run as user = netdata
 
 [web]
     bind to = 127.0.0.1
 EOF
-        fi
-    fi
 
     systemctl enable netdata || true
     systemctl restart netdata || true
     echo "   Netdata aktif secara internal di 127.0.0.1:19999"
 
-    # 6. Konfigurasi monitoring ROUTER via SNMP
+    # 5. Konfigurasi monitoring ROUTER via SNMP
     echo ">> Konfigurasi monitoring Router MikroTik (${ROUTER_IP}) via SNMP..."
     apt install -y snmp || true
 
     mkdir -p "${CONF_DIR}/go.d"
 
-    # Aktifkan plugin SNMP pada go.d.conf
-    if [ -f "${CONF_DIR}/go.d.conf" ]; then
-        if grep -q "^\s*snmp:" "${CONF_DIR}/go.d.conf"; then
-            sed -i "s/^\s*snmp:.*/  snmp: yes/" "${CONF_DIR}/go.d.conf"
-        else
-            echo "  snmp: yes" >> "${CONF_DIR}/go.d.conf"
-        fi
-    else
-        cat > "${CONF_DIR}/go.d.conf" <<EOF
+    # Aktifkan modul SNMP
+    cat > "${CONF_DIR}/go.d.conf" <<EOF
 modules:
   snmp: yes
 EOF
-    fi
 
     # Konfigurasi job SNMP (snmp.conf)
     cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
@@ -383,21 +375,25 @@ jobs:
             algorithm: absolute
 EOF
 
-    chown -R netdata:netdata "${CONF_DIR}/go.d" 2>/dev/null || true
+    chown -R netdata:netdata "${CONF_DIR}" 2>/dev/null || true
     systemctl restart netdata || true
     echo "   Host 'router' (${ROUTER_IP}) berhasil dikonfigurasi via SNMP."
     return 0
 }
 
-# Jalankan fungsi instalasi Netdata secara toleran error
+# Jalankan fungsi instalasi Netdata
 if install_netdata_service; then
     echo ">> [OK] Netdata Berhasil Terinstal & Dikonfigurasi."
 else
-    echo ">> [WARNING] Netdata gagal diunduh karena gangguan jaringan. Script TETAP Dilanjutkan ke tahap berikutnya..."
+    echo ">> [WARNING] Netdata gagal diunduh. Menutupi dengan perbaikan VHost Nginx..."
 fi
 
-# --- Reverse proxy nginx untuk monitor.${DOMAIN} (HTTPS) ---
+# --- 6. Reverse proxy Nginx untuk monitor.${DOMAIN} (HTTPS + WebSocket) ---
 echo ">> Konfigurasi reverse proxy HTTPS untuk monitor.${DOMAIN}..."
+
+# Buat folder SSL jika belum ada
+mkdir -p /etc/nginx/ssl
+
 cat > /etc/nginx/sites-available/monitor.${DOMAIN} <<EOF
 server {
     listen 80;
@@ -419,8 +415,10 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
 
+        # DUKUNGAN WEBSOCKET PERBAIKAN (WAJIB UNTUK NETDATA)
         proxy_http_version 1.1;
-        proxy_set_header Connection "keep-alive";
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
 }
 EOF
