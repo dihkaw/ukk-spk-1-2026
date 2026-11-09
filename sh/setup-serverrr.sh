@@ -294,24 +294,23 @@ echo "   Web server aktif: https://${DOMAIN} (self-signed)"
 # ================= 5. INSTALL & KONFIGURASI NETDATA (MONITORING) =================
 echo ">> [4/5] Install Netdata (Monitoring Server)..."
 
-# 1. Hapus paket Netdata versi apt jika ada (agar tidak bentrok dengan versi resmi static)
-if dpkg -l | grep -q netdata; then
-    echo "   Membersihkan Netdata versi apt lama..."
+# 1. Hapus instalasi versi lama / terputus jika ada
+if dpkg -l | grep -q netdata || [ -d "/etc/netdata" ]; then
+    echo "   Membersihkan versi Netdata lama..."
     apt remove --purge -y netdata netdata-* >/dev/null 2>&1
-    rm -rf /usr/sbin/netdata /usr/bin/netdata /usr/libexec/netdata /usr/lib/netdata /etc/netdata
+    rm -rf /etc/netdata /var/lib/netdata /var/cache/netdata /usr/share/netdata /var/log/netdata /tmp/kickstart*
 fi
 
-# 2. Install Netdata resmi (Static Build: wajib mencakup go.d.plugin SNMP & bebas error repo Ubuntu)
-if ! command -v netdata >/dev/null 2>&1 && [ ! -f /usr/libexec/netdata/plugins.d/go.d.plugin ] && [ ! -f /opt/netdata/usr/libexec/netdata/plugins.d/go.d.plugin ]; then
-    echo "   Mengunduh dan memasang Netdata Static Build..."
-    wget -O /tmp/kickstart.sh https://get.netdata.cloud/kickstart.sh
-    bash /tmp/kickstart.sh --non-interactive --stable-channel --static-only --reinstall-even-if-unsafe --disable-telemetry
-    rm -f /tmp/kickstart.sh
-fi
+# 2. Tambah Repository Resmi Netdata (PackageCloud) & Install via APT
+echo "   Menambahkan repository resmi Netdata (PackageCloud)..."
+curl -s https://packagecloud.io/install/repositories/netdata/netdata/script.deb.sh | bash
 
-# 3. Deteksi direktori konfigurasi Netdata (otomatis sesuaikan lokasi /etc atau /opt)
+echo "   Menginstal Netdata versi resmi..."
+apt update -y
+apt install -y netdata
+
+# 3. Deteksi direktori konfigurasi Netdata
 CONF_DIR="/etc/netdata"
-[ -d "/opt/netdata/etc/netdata" ] && CONF_DIR="/opt/netdata/etc/netdata"
 
 # 4. Batasi akses Netdata ke Localhost (127.0.0.1)
 if [ -f "${CONF_DIR}/netdata.conf" ]; then
