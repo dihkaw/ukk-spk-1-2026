@@ -317,7 +317,7 @@ install_netdata_service() {
     apt install -y -o Acquire::Retries=10 -o Acquire::http::Timeout=120 --fix-missing netdata || return 1
 
     CONF_DIR="/etc/netdata"
-    mkdir -p "${CONF_DIR}"
+    mkdir -p "${CONF_DIR}" "${CONF_DIR}/vnodes" "${CONF_DIR}/go.d"
 
     # 4. Buat konfigurasi netdata.conf yang bersih (bind ke 127.0.0.1)
     cat > "${CONF_DIR}/netdata.conf" <<EOF
@@ -328,32 +328,26 @@ install_netdata_service() {
     bind to = 127.0.0.1
 EOF
 
-    systemctl enable netdata || true
-    systemctl restart netdata || true
-    echo "   Netdata aktif secara internal di 127.0.0.1:19999"
+    # 5. Buat registrasi Virtual Node di /etc/netdata/vnodes/vnodes.conf (WAJIB DIBUAT)
+    cat > "${CONF_DIR}/vnodes/vnodes.conf" <<EOF
+- hostname: Router-MikroTik
+  guid: "11111111-2222-3333-4444-555555555555"
+EOF
 
-    # 5. Konfigurasi monitoring ROUTER via SNMP & Virtual Node
-    echo ">> Konfigurasi monitoring Router MikroTik (${ROUTER_IP}) via SNMP..."
-    apt install -y snmp || true
-
-    mkdir -p "${CONF_DIR}/go.d"
-
-    # Aktifkan modul SNMP
+    # 6. Aktifkan modul SNMP di go.d.conf
     cat > "${CONF_DIR}/go.d.conf" <<EOF
 modules:
   snmp: yes
 EOF
 
-    # Konfigurasi job SNMP + Virtual Node (snmp.conf)
+    # 7. Konfigurasi job SNMP (snmp.conf) yang terhubung ke vnode Router-MikroTik
     cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
 jobs:
   - name: router
+    vnode: Router-MikroTik
     update_every: 10
     hostname: '${ROUTER_IP}'
     community: '${SNMP_COMMUNITY}'
-    vnode:
-      hostname: 'Router-MikroTik'
-      guid: '11111111-2222-3333-4444-555555555555'
     options:
       port: 161
       version: 2
@@ -365,7 +359,7 @@ jobs:
         family: 'cpu'
         type: line
         dimensions:
-          - oid: 1.3.6.1.2.1.25.3.3.1.2.1
+          - oid: '1.3.6.1.2.1.25.3.3.1.2.1'
             name: cpu
             algorithm: absolute
       - id: 'system_uptime'
@@ -374,14 +368,20 @@ jobs:
         family: 'system'
         type: line
         dimensions:
-          - oid: 1.3.6.1.2.1.1.3.0
+          - oid: '1.3.6.1.2.1.1.3.0'
             name: uptime
             algorithm: absolute
 EOF
 
+    # Install alat penguji SNMP
+    apt install -y snmp >/dev/null 2>&1 || true
+
+    # Atur kepemilikan direktori konfigurasi ke user netdata
     chown -R netdata:netdata "${CONF_DIR}" 2>/dev/null || true
+
+    systemctl enable netdata || true
     systemctl restart netdata || true
-    echo "   Host 'router' (${ROUTER_IP}) berhasil dikonfigurasi via SNMP sebagai Virtual Node."
+    echo "   Netdata & Virtual Node Router-MikroTik (${ROUTER_IP}) berhasil dikonfigurasi."
     return 0
 }
 
@@ -389,13 +389,12 @@ EOF
 if install_netdata_service; then
     echo ">> [OK] Netdata Berhasil Terinstal & Dikonfigurasi."
 else
-    echo ">> [WARNING] Netdata gagal diunduh. Menutupi dengan perbaikan VHost Nginx..."
+    echo ">> [WARNING] Netdata gagal diunduh."
 fi
 
 # --- 6. Reverse proxy Nginx untuk monitor.${DOMAIN} (HTTPS + WebSocket) ---
 echo ">> Konfigurasi reverse proxy HTTPS untuk monitor.${DOMAIN}..."
 
-# Buat folder SSL jika belum ada
 mkdir -p /etc/nginx/ssl
 
 cat > /etc/nginx/sites-available/monitor.${DOMAIN} <<EOF
@@ -419,10 +418,11 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
 
-        # DUKUNGAN WEBSOCKET PERBAIKAN (WAJIB UNTUK NETDATA)
+        # Support Streaming & WebSocket Netdata
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_buffering off;
     }
 }
 EOF
