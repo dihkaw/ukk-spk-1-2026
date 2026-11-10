@@ -344,10 +344,12 @@ EOF
     cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
 jobs:
   - name: router
-    vnode: Router-MikroTik
     update_every: 10
-    hostname: '${ROUTER_IP}'
-    community: '${SNMP_COMMUNITY}'
+    hostname: '192.168.30.1'
+    community: 'public'
+    vnode:
+      hostname: 'Router-MikroTik'
+      guid: '11111111-2222-3333-4444-555555555555'
     options:
       port: 161
       version: 2
@@ -359,7 +361,7 @@ jobs:
         family: 'cpu'
         type: line
         dimensions:
-          - oid: '1.3.6.1.2.1.25.3.3.1.2.1'
+          - oid: 1.3.6.1.2.1.25.3.3.1.2.1
             name: cpu
             algorithm: absolute
       - id: 'system_uptime'
@@ -368,7 +370,7 @@ jobs:
         family: 'system'
         type: line
         dimensions:
-          - oid: '1.3.6.1.2.1.1.3.0'
+          - oid: 1.3.6.1.2.1.1.3.0
             name: uptime
             algorithm: absolute
 EOF
