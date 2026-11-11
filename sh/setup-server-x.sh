@@ -317,7 +317,7 @@ install_netdata_service() {
     apt install -y -o Acquire::Retries=10 -o Acquire::http::Timeout=120 --fix-missing netdata || return 1
 
     CONF_DIR="/etc/netdata"
-    mkdir -p "${CONF_DIR}" "${CONF_DIR}/vnodes" "${CONF_DIR}/go.d"
+    mkdir -p "${CONF_DIR}/go.d"
 
     # 4. Buat konfigurasi netdata.conf yang bersih (bind ke 127.0.0.1)
     cat > "${CONF_DIR}/netdata.conf" <<EOF
@@ -328,62 +328,62 @@ install_netdata_service() {
     bind to = 127.0.0.1
 EOF
 
-    # 5. Buat registrasi Virtual Node di /etc/netdata/vnodes/vnodes.conf (WAJIB DIBUAT)
-    cat > "${CONF_DIR}/vnodes/vnodes.conf" <<EOF
-- hostname: Router-MikroTik
-  guid: "11111111-2222-3333-4444-555555555555"
-EOF
-
-    # 6. Aktifkan modul SNMP di go.d.conf
+    # 5. Aktifkan modul SNMP di go.d.conf
     cat > "${CONF_DIR}/go.d.conf" <<EOF
 modules:
   snmp: yes
 EOF
 
-    # 7. Konfigurasi job SNMP (snmp.conf) yang terhubung ke vnode Router-MikroTik
+    # 6. Konfigurasi job SNMP (snmp.conf) untuk MikroTik Router CHR (CPU, Uptime, RAM)
     cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
 jobs:
-  - name: router
+  - name: mikrotik_router
     update_every: 10
-    hostname: '192.168.30.1'
-    community: 'public'
-    vnode:
-      hostname: 'Router-MikroTik'
-      guid: '11111111-2222-3333-4444-555555555555'
+    hostname: '${ROUTER_IP}'
+    community: '${SNMP_COMMUNITY}'
     options:
       port: 161
       version: 2
       timeout: 2
     charts:
       - id: 'cpu_load'
-        title: 'Router CPU Load'
+        title: 'MikroTik Router CHR - CPU Load'
         units: '%'
-        family: 'cpu'
+        family: 'MikroTik Router CHR'
         type: line
         dimensions:
           - oid: 1.3.6.1.2.1.25.3.3.1.2.1
             name: cpu
             algorithm: absolute
       - id: 'system_uptime'
-        title: 'Router Uptime'
+        title: 'MikroTik Router CHR - System Uptime'
         units: 'ticks'
-        family: 'system'
+        family: 'MikroTik Router CHR'
         type: line
         dimensions:
           - oid: 1.3.6.1.2.1.1.3.0
             name: uptime
             algorithm: absolute
+      - id: 'memory_usage'
+        title: 'MikroTik Router CHR - RAM Used'
+        units: 'bytes'
+        family: 'MikroTik Router CHR'
+        type: area
+        dimensions:
+          - oid: 1.3.6.1.2.1.25.2.3.1.6.65536
+            name: ram_used
+            algorithm: absolute
 EOF
 
-    # Install alat penguji SNMP
+    # Install alat penguji SNMP CLI
     apt install -y snmp >/dev/null 2>&1 || true
 
-    # Atur kepemilikan direktori konfigurasi ke user netdata
+    # Atur hak akses ke user netdata
     chown -R netdata:netdata "${CONF_DIR}" 2>/dev/null || true
 
     systemctl enable netdata || true
     systemctl restart netdata || true
-    echo "   Netdata & Virtual Node Router-MikroTik (${ROUTER_IP}) berhasil dikonfigurasi."
+    echo "   Monitoring MikroTik Router CHR (${ROUTER_IP}) berhasil dikonfigurasi."
     return 0
 }
 
