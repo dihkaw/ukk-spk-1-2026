@@ -338,7 +338,7 @@ EOF
     cat > "${CONF_DIR}/go.d/snmp.conf" <<EOF
 jobs:
   - name: mikrotik_router
-    update_every: 10
+    update_every: 1
     hostname: '${ROUTER_IP}'
     community: '${SNMP_COMMUNITY}'
     options:
