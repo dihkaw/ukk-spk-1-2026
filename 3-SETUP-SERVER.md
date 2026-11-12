@@ -520,7 +520,7 @@ Isi (sesuaikan `community` dengan yang dikonfigurasi di router MikroTik):
 ```yaml
 jobs:
   - name: router
-    update_every: 10
+    update_every: 1
     hostname: '192.168.30.1'
     community: 'public'
     options:
