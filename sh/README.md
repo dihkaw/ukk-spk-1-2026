@@ -48,11 +48,16 @@ ping -c 4 8.8.8.8     #tes internet
 ```
 Kalau ping 8.8.8.8 berhasil (reply, bukan timeout), baru lanjut ke langkah 6.
 
-6. Download & jalankan bash script
+6. Update repository Ubuntu ke server utama (archive.ubuntu.com)
+```bash
+sudo sed -i 's|http://id.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+```
+
+7. Download & jalankan bash script
 ```bash
 wget https://raw.githubusercontent.com/dihkaw/ukk-spk-1-2026/main/sh/setup-server.sh -O setup-server.sh && sudo chmod +x setup-server.sh && sudo ./setup-server.sh
 ```
 
-7. Uji ciba di PC client
+8. Uji ciba di PC client
    Pastikan konfigurasi IP pada client menggunakan alamat DNS utama 192.168.30.10 dan alternate kosong
 
