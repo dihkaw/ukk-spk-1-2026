@@ -106,10 +106,10 @@ ping -c 4 8.8.8.8        # tes internet
 
 ---
 
-## 2. Update Sistem
+## 2. Update Repository dan Sistem
 
 ```bash
-sudo apt update -y
+sudo sed -i 's|http://id.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources && sudo apt update -y
 ```
 
 Atur zona waktu agar log berwaktu benar:
