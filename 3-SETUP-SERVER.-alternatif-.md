@@ -1,5 +1,5 @@
-Setup Server Manual — UKK TKJ 2026 SPK Paket 1
-Ubuntu Server 24.04 LTS — Tanpa Bash Script (Full Manual)
+# Setup Server Manual — UKK TKJ 2026 SPK Paket 1
+## Ubuntu Server 24.04 LTS — Tanpa Bash Script (Full Manual)
 Server ini akan menjalankan 3 layanan utama: DNS (`bind9`), Web (`nginx` + HTTPS self-signed), dan Monitoring (`netdata` + SNMP router MikroTik) pada segmen VLAN 30 (`192.168.30.10/24`).
 > 💡 **Kerjakan lewat PuTTY dari PC host, bukan lewat konsol VMware.** Copy-paste ke konsol VMware sering terpotong (tidak lengkap). Karena itu server memakai **NIC kedua (Host-Only)** untuk akses SSH. Konsol VMware hanya dipakai pada tahap awal (konfigurasi IP static & pengecekan koneksi), lalu seluruh konfigurasi layanan dikerjakan dari PuTTY.
 > ⚡ **Catatan Otomatisasi:** Langkah manual pada panduan ini setara dengan isi skrip otomatis `setup-server.sh` pada `README.md`. Gunakan panduan ini jika ingin mengerjakan langkah demi langkah secara manual.
