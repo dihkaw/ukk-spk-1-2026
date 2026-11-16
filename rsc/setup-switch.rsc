@@ -149,6 +149,9 @@ set bridge-switch vlan-filtering=yes
 
 :log info "=== KONFIGURASI SWITCH SELESAI DI-IMPORT ==="
 
+/system logging action set memory memory-lines=1
+/system logging action set memory memory-lines=1000
+
 # =====================================================================
 #  VERIFIKASI (jalankan manual satu per satu di Terminal setelah import)
 # =====================================================================
