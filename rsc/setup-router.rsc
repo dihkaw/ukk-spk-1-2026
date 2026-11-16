@@ -268,6 +268,9 @@ set allowed-interface-list=Boleh-Winbox
 
 :log info "=== KONFIGURASI ROUTER SELESAI DI-IMPORT ==="
 
+/system logging action set memory memory-lines=1
+/system logging action set memory memory-lines=1000
+
 # =====================================================================
 #  VERIFIKASI (jalankan manual satu per satu di Terminal setelah import)
 #  Urutan LOGIS chain input (SSH/Winbox) setelah import (cek dengan
