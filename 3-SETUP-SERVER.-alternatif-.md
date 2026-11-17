@@ -91,7 +91,7 @@ ping -c 4 8.8.8.8        # tes internet
 1. Pada template OVA Ubuntu 24.04, layanan SSH umumnya sudah aktif. *(Opsional: jika SSH belum terpasang, jalankan perintah berikut di konsol VMware)*:
 
    ```bash
-   sudo apt update && sudo apt install -y openssh-server
+   sudo apt update && sudo apt install -y openssh-server   # Abaikan jika sudah ada ssh dan bisa konek ke server
    sudo systemctl enable --now ssh
    ```
 
@@ -293,10 +293,7 @@ sudo chmod 644 /var/www/lab-smk.xyz/index.html
 ### 4.5 Buat Sertifikat SSL Self-Signed
 
 ```bash
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout /etc/nginx/ssl/lab-smk.xyz.key \
-  -out /etc/nginx/ssl/lab-smk.xyz.crt \
-  -subj "/C=ID/ST=JawaTengah/L=Purwokerto/O=SMK/OU=TKJ/CN=lab-smk.xyz"
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/lab-smk.xyz.key -out /etc/nginx/ssl/lab-smk.xyz.crt -subj "/C=ID/ST=JawaTengah/L=Purwokerto/O=SMK/OU=TKJ/CN=lab-smk.xyz"
 ```
 
 ### 4.6 Buat Virtual Host Nginx (HTTP Redirect ke HTTPS)
